@@ -26,14 +26,18 @@ version:            0.1.0.0
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  MyLib
+    exposed-modules:  Unaligned
 
     -- Modules included in this library but not exported.
     -- other-modules:
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-    build-depends:    base ^>=4.14.3.0
+    build-depends:    base ^>=4.14.3.0,
+                      bytestring,
+                      typenums,
+                      bitstring
+ 
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -47,9 +51,22 @@ executable LZW
     -- other-extensions:
     build-depends:
         base ^>=4.14.3.0,
-        bytestring,
-        typenums,
-        LZW
+        LZW,
 
     hs-source-dirs:   app
     default-language: Haskell2010
+
+Test-suite unaligned-tests
+  Hs-Source-Dirs:       tests
+  Main-Is:              UnalignedTests.hs
+  Type:                 exitcode-stdio-1.0
+
+  Build-Depends:        base >= 4 && < 5
+  Ghc-Options:          -Wall
+
+  Build-Depends:        
+    hspec, 
+    HUnit, 
+    QuickCheck, 
+    bytestring, 
+    LZW
