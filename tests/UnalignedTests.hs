@@ -22,16 +22,16 @@ main = hspec $ do
     it "precisify later" $ do
       let (bs :> unfinished) =
             pushWord
-              ((empty :> Unaligned 128) :: UnalignedBytestring 7)
-              ((Unaligned $ 256 + 255 ) :: Unaligned Word16 7)
+              ((empty :> Unaligned 128 7) :: UnalignedBytestring)
+              ((Unaligned (256 + 255) 7) :: Unaligned RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
-            unfinished `shouldBe` Unaligned (128 + 64)
+            unfinished `shouldBe` Unaligned (128 + 64) 6
 
       let (bs :> unfinished) =
             pushWord
-                ((empty :> Unaligned 254) :: UnalignedBytestring 1)
-                (Unaligned 65535 :: Unaligned Word16 0)
+                ((empty :> Unaligned 254 1) :: UnalignedBytestring)
+                (Unaligned 65535 0 :: Unaligned RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
-            unfinished `shouldBe` Unaligned 254
+            unfinished `shouldBe` Unaligned 254 1
