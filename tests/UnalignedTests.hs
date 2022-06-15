@@ -27,3 +27,11 @@ main = hspec $ do
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned (128 + 64)
+
+      let (bs :> unfinished) =
+            pushWord
+                ((empty :> Unaligned 254) :: UnalignedBytestring 1)
+                (Unaligned 65535 :: Unaligned Word16 0)
+       in do
+            BS.last bs `shouldBe` 255
+            unfinished `shouldBe` Unaligned 254
