@@ -5,9 +5,7 @@ module Main where
 
 import Data.ByteString as BS
 import Data.Word
-import Test.HUnit
 import Test.Hspec
-import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Unaligned
 
@@ -23,7 +21,7 @@ main = hspec $ do
       let (bs :> unfinished) =
             pushWord
               ((empty :> Unaligned 128 7) :: UnalignedBytestring)
-              ((Unaligned (256 + 255) 7) :: Unaligned RightPacked Word16)
+              (Unaligned (256 + 255) 7 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned (128 + 64) 6
@@ -31,7 +29,7 @@ main = hspec $ do
       let (bs :> unfinished) =
             pushWord
                 ((empty :> Unaligned 254 1) :: UnalignedBytestring)
-                (Unaligned 65535 0 :: Unaligned RightPacked Word16)
+                (Unaligned 65535 0 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned 254 1
