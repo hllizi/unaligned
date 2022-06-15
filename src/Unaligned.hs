@@ -68,7 +68,9 @@ pushWord (bs :> (Unaligned lastByte)) (Unaligned word) =
       shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
      in if usedRight - (unusedLeft + unusedRight) < 8 
                         then
-                                (bs `snoc` filledUpLastByte) :>  Unaligned (leftByte shiftedRestOfWord)
+                                    (bs `snoc` filledUpLastByte) 
+                                :>  Unaligned (leftByte shiftedRestOfWord)
                         else    
-                                (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord) :> Unaligned (rightByte shiftedRestOfWord)
+                                    (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord) 
+                                :>  Unaligned (rightByte shiftedRestOfWord)
 
