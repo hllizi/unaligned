@@ -17,23 +17,37 @@ import Data.Word
 
 type Bitcount = Word
 
-newtype Unaligned integral (n :: Nat) = Unaligned integral
+data Packing = RightPacked | LeftPacked
+
+type family IsPacking a where
+  IsPacking RightPacked = 'True
+  IsPacking LeftPacked = 'True
+  IsPacking a = 'False
+
+newtype Unaligned (p :: Packing) integral (n :: Nat) = Unaligned integral
   deriving (Eq)
+
+make :: forall p i n. (IsPacking p ~ 'True, Integral i, KnownNat n) => i -> Unaligned p i n
+make = Unaligned . unusedToZero
+    where
+        unusedToZero i =
+            let mask = undefined
+            in mask
 
 class UnalignedContainer a where
   unusedBits :: a -> Integer
 
-instance (KnownNat n, Integral i) => UnalignedContainer (Unaligned i n) where
+instance (KnownNat n, Integral i) => UnalignedContainer (Unaligned p i n) where
   unusedBits _ = natVal (Proxy @n)
 
-instance (Show i) => Show (Unaligned i n) where
-    show (Unaligned x) = show x 
+instance (Show i) => Show (Unaligned p i n) where
+  show (Unaligned x) = show x
 
 -- Non-empty Bytestring with designated incomplete last byte
-data UnalignedBytestring n = ByteString :> Unaligned Word8 n
-    deriving (Show) 
+data UnalignedBytestring n = ByteString :> Unaligned LeftPacked Word8 n
+  deriving (Show)
 
-lastByte :: UnalignedBytestring n -> Unaligned Word8 n
+lastByte :: UnalignedBytestring n -> Unaligned LeftPacked Word8 n
 lastByte (_ :> w) = w
 
 leftByte :: Word16 -> Word8
@@ -52,7 +66,7 @@ pushWord ::
   forall m n k.
   (KnownNat m, KnownNat n, KnownNat k, k ~ Mod (m + n) 8) =>
   UnalignedBytestring m ->
-  Unaligned Word16 n ->
+  Unaligned RightPacked Word16 n ->
   UnalignedBytestring k
 pushWord (bs :> (Unaligned lastByte)) (Unaligned word) =
   let unusedLeft = natVal (Proxy @m)
@@ -64,13 +78,12 @@ pushWord (bs :> (Unaligned lastByte)) (Unaligned word) =
         if shiftValue >= 0
           then shiftL word (fromIntegral shiftValue)
           else shiftR word (fromIntegral (- shiftValue))
-      filledUpLastByte = lastByte `xor` leftByte wordAdjusted 
+      filledUpLastByte = lastByte `xor` leftByte wordAdjusted
       shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
-     in if usedRight - (unusedLeft + unusedRight) < 8 
-                        then
-                                    (bs `snoc` filledUpLastByte) 
-                                :>  Unaligned (leftByte shiftedRestOfWord)
-                        else    
-                                    (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord) 
-                                :>  Unaligned (rightByte shiftedRestOfWord)
-
+   in if usedRight - (unusedLeft + unusedRight) < 8
+        then
+          (bs `snoc` filledUpLastByte)
+            :> Unaligned (leftByte shiftedRestOfWord)
+        else
+          (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
+            :> Unaligned (rightByte shiftedRestOfWord)
