@@ -37,7 +37,9 @@ class UnalignedContainer a where
             i -> 
             Integer -> 
             a
-makeMask wordSize setBits = 2 ^ (wordSize - fromIntegral setBits) - 1
+
+-- | gives the number corresponding to a mask of size wordSize with a number of unsetBits unset at the left end of the mask.
+makeMask wordSize unsetBits = 2 ^ (wordSize - fromIntegral unsetBits) - 1
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightPacked i) where
   unusedBits (Unaligned _ n) = n
