@@ -5,9 +5,7 @@ module Main where
 
 import Data.ByteString as BS
 import Data.Word
-import Test.HUnit
 import Test.Hspec
-import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Unaligned
 
@@ -18,20 +16,24 @@ main = hspec $ do
       property $
         \x -> combineTwoBytes (leftByte x) (rightByte x) `shouldBe` (x :: Word16)
 
-  describe "Push a 9-bit word" $ do
-    it "precisify later" $ do
+  describe "Test the results of pushing an unaligned word onto a ByteString" $ do
+    it "" $ do
       let (bs :> unfinished) =
             pushWord
-              ((empty :> Unaligned 128) :: UnalignedBytestring 7)
-              ((Unaligned $ 256 + 255 ) :: Unaligned Word16 7)
+              ((empty :> Unaligned 128 7) :: UnalignedBytestring)
+              (Unaligned (256 + 255) 7 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
-            unfinished `shouldBe` Unaligned (128 + 64)
+            unfinished `shouldBe` Unaligned (128 + 64) 6
 
       let (bs :> unfinished) =
             pushWord
-                ((empty :> Unaligned 254) :: UnalignedBytestring 1)
-                (Unaligned 65535 :: Unaligned Word16 0)
+                ((empty :> Unaligned 254 1) :: UnalignedBytestring)
+                (Unaligned 65535 0 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
-            unfinished `shouldBe` Unaligned 254
+            unfinished `shouldBe` Unaligned 254 1
+
+  describe "Make maske" $ do
+    it "make mask for half of a byte, zeroes left" $ do
+        makeMask 8 4 `shouldBe` 15
