@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Unaligned where
 
@@ -14,10 +15,12 @@ import Data.ByteString
 import Data.Proxy
 import Data.TypeNums
 import Data.Word
+import GHC.Exts
 
 type Bitcount = Word
 
 data Packing = RightPacked | LeftPacked
+
 
 type family IsPacking a where
   IsPacking RightPacked = 'True
@@ -27,21 +30,33 @@ type family IsPacking a where
 data Unaligned (p :: Packing) integral = Unaligned integral Integer 
   deriving (Eq)
 
-make :: forall p i n. (IsPacking p ~ 'True, Integral i) => 
-            i -> 
-            Integer -> 
-            Unaligned p Integer
-make = flip Unaligned . unusedToZero
-  where
-    unusedToZero i =
-      let mask = undefined
-       in mask
 
 class UnalignedContainer a where
   unusedBits :: a -> Integer
+  make :: forall i n. (Integral i, FiniteBits i) => 
+            i -> 
+            Integer -> 
+            a
+makeMask wordSize setBits = 2 ^ (wordSize - fromIntegral setBits) - 1
 
-instance Integral i => UnalignedContainer (Unaligned p i) where
+instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightPacked i) where
   unusedBits (Unaligned _ n) = n
+  make integral n = Unaligned unusedToZero n
+   where
+    unusedToZero =
+      let mask = fromIntegral $ makeMask (finiteBitSize integral) n
+       in fromIntegral $ mask .&. integral
+
+instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked i) where
+  unusedBits (Unaligned _ n) = n
+  make integral n = Unaligned unusedToZero n
+   where
+    unusedToZero =
+      let mask = shiftL 
+                    (fromIntegral $ makeMask (finiteBitSize integral) n)
+                    (fromIntegral n)
+       in fromIntegral $ mask .&. integral
+
 
 instance (Show i) => Show (Unaligned p i) where
   show (Unaligned x _) = show x
@@ -65,6 +80,7 @@ combineTwoBytes leftByte rightByte =
       rightByte16 = fromIntegral @_ @Word16 rightByte
    in shiftL leftByte16 8 `xor` rightByte16
 
+-- | push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring. 
 pushWord ::
   UnalignedBytestring ->
   Unaligned RightPacked Word16 ->
