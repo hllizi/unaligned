@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Unaligned where
@@ -28,36 +29,39 @@ type family IsPacking a where
   IsPacking LeftPacked = 'True
   IsPacking a = 'False
 
-data Unaligned (p :: Packing) integral = Unaligned integral Integer 
+data Unaligned (p :: Packing) integral = Unaligned integral Int 
   deriving (Eq)
 
 
-class UnalignedContainer a where
-  unusedBits :: a -> Integer
-  make :: forall i n. (Integral i, FiniteBits i) => 
-            i -> 
-            Integer -> 
+class (Integral (EmbeddedWord a), FiniteBits (EmbeddedWord a)) => UnalignedContainer a where
+  type EmbeddedWord a :: *
+  usedBits :: a -> Int
+  makeUnaligned :: 
+            EmbeddedWord a -> 
+            Int -> 
             a
 
 -- | gives the number corresponding to a mask of size wordSize with a number of unsetBits unset at the left end of the mask.
-makeMask wordSize unsetBits = 2 ^ (wordSize - fromIntegral unsetBits) - 1
+makeMask setBits = 2 ^ setBits - 1
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightPacked i) where
-  unusedBits (Unaligned _ n) = n
-  make integral n = Unaligned unusedToZero n
+  type EmbeddedWord (Unaligned 'RightPacked i) = i
+  usedBits (Unaligned _ n) = n
+  makeUnaligned integral n = Unaligned unusedToZero n
    where
     unusedToZero =
-      let mask = fromIntegral $ makeMask (finiteBitSize integral) n
+      let mask = fromIntegral $ makeMask n
        in fromIntegral $ mask .&. integral
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked i) where
-  unusedBits (Unaligned _ n) = n
-  make integral n = Unaligned unusedToZero n
+  type EmbeddedWord (Unaligned 'LeftPacked i) = i
+  usedBits (Unaligned _ n) = n
+  makeUnaligned integral n = Unaligned unusedToZero n
    where
     unusedToZero =
       let mask = shiftL 
-                    (fromIntegral $ makeMask (finiteBitSize integral) n)
-                    (fromIntegral n)
+                    (fromIntegral $ makeMask n)
+                    (finiteBitSize integral - n)
        in fromIntegral $ mask .&. integral
 
 
@@ -95,11 +99,9 @@ pushWord ::
   UnalignedBytestring LeftPacked ->
   Unaligned RightPacked Word16 ->
   UnalignedBytestring LeftPacked
-pushWord (bs :> (Unaligned lastByte m)) (Unaligned word n) =
-  let unusedLeft =  m
-      usedLeft = 8 - unusedLeft
-      unusedRight = n
-      usedRight = 16 - unusedRight
+pushWord (bs :> (Unaligned lastByte usedLeft)) (Unaligned word usedRight) =
+  let unusedLeft = 8 - usedLeft
+      unusedRight = 16 - usedRight
       shiftValue = unusedRight - usedLeft
       wordAdjusted =
         if shiftValue >= 0
@@ -107,13 +109,13 @@ pushWord (bs :> (Unaligned lastByte m)) (Unaligned word n) =
           else shiftR word (fromIntegral (- shiftValue))
       filledUpLastByte = lastByte `xor` leftByte wordAdjusted
       shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
-      resultUnused = mod (m + n) 8
+      resultUnused = mod (unusedLeft + unusedRight) 8
    in if usedRight - (unusedLeft + unusedRight) < 8
         then
           (bs `snoc` filledUpLastByte)
-            :> Unaligned (leftByte shiftedRestOfWord) resultUnused
+            :> Unaligned (leftByte shiftedRestOfWord) (8 - resultUnused)
         else
           (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
-            :> Unaligned (rightByte shiftedRestOfWord) resultUnused
+            :> Unaligned (rightByte shiftedRestOfWord) (8 - resultUnused)
 
 
