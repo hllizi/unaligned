@@ -16,8 +16,8 @@ main = hspec $ do
       property $
         \x -> combineTwoBytes (leftByte x) (rightByte x) `shouldBe` (x :: Word16)
 
-  describe "Push a 9-bit word" $ do
-    it "precisify later" $ do
+  describe "Test the results of pushing an unaligned word onto a ByteString" $ do
+    it "" $ do
       let (bs :> unfinished) =
             pushWord
               ((empty :> Unaligned 128 7) :: UnalignedBytestring)
@@ -33,3 +33,7 @@ main = hspec $ do
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned 254 1
+
+  describe "Make maske" $ do
+    it "make mask for half of a byte, zeroes left" $ do
+        makeMask 8 4 `shouldBe` 15

@@ -63,16 +63,19 @@ instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked
 instance (Show i) => Show (Unaligned p i) where
   show (Unaligned x _) = show x
 
--- Non-empty Bytestring with designated incomplete last byte
+-- | Non-empty Bytestring with designated incomplete last byte
 data UnalignedBytestring = ByteString :> Unaligned LeftPacked Word8
   deriving (Show)
 
+-- | get the last (unaligned) byte of an UnalignedBytestring
 lastByte :: UnalignedBytestring -> Unaligned LeftPacked Word8
 lastByte (_ :> w) = w
 
+-- | Get the left byte of a 16 Bit word
 leftByte :: Word16 -> Word8
 leftByte word = fromIntegral $ shiftR word 8
 
+-- | Get the right byte of a 16 Bit word
 rightByte :: Word16 -> Word8
 rightByte word = fromIntegral $ word .&. 255
 
@@ -107,3 +110,6 @@ pushWord (bs :> (Unaligned lastByte m)) (Unaligned word n) =
         else
           (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
             :> Unaligned (rightByte shiftedRestOfWord) resultUnused
+
+takeWord :: 
+    
