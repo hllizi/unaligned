@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
 
 module Main where
 
@@ -20,7 +21,7 @@ main = hspec $ do
     it "" $ do
       let (bs :> unfinished) =
             pushWord
-              ((empty :> Unaligned 128 7) :: UnalignedBytestring)
+              ((empty :> Unaligned 128 7) :: UnalignedBytestring 'LeftPacked)
               (Unaligned (256 + 255) 7 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255
@@ -28,7 +29,7 @@ main = hspec $ do
 
       let (bs :> unfinished) =
             pushWord
-                ((empty :> Unaligned 254 1) :: UnalignedBytestring)
+                ((empty :> Unaligned 254 1) :: UnalignedBytestring 'LeftPacked)
                 (Unaligned 65535 0 :: Unaligned 'RightPacked Word16)
        in do
             BS.last bs `shouldBe` 255

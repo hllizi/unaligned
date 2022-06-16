@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Unaligned where
 
@@ -63,12 +64,16 @@ instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked
 instance (Show i) => Show (Unaligned p i) where
   show (Unaligned x _) = show x
 
--- | Non-empty Bytestring with designated incomplete last byte
-data UnalignedBytestring = ByteString :> Unaligned LeftPacked Word8
-  deriving (Show)
+-- | Non-empty Bytestring with designated incomplete last byte. This way, there is no need to deal with emptiness here, as the byte to be operated upon can be obtained by simple pattern matching.
+data UnalignedBytestring (p :: Packing) where
+    (:>) :: ByteString -> Unaligned LeftPacked Word8 -> UnalignedBytestring LeftPacked
+    (:<) :: Unaligned RightPacked Word8 -> ByteString -> UnalignedBytestring RightPacked
 
--- | get the last (unaligned) byte of an UnalignedBytestring
-lastByte :: UnalignedBytestring -> Unaligned LeftPacked Word8
+deriving instance Show (UnalignedBytestring p)
+
+
+-- | get the last (unaligned) byte of an UnalignedBytestring LeftPacked
+lastByte :: UnalignedBytestring LeftPacked -> Unaligned LeftPacked Word8
 lastByte (_ :> w) = w
 
 -- | Get the left byte of a 16 Bit word
@@ -87,9 +92,9 @@ combineTwoBytes leftByte rightByte =
 
 -- | push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring. 
 pushWord ::
-  UnalignedBytestring ->
+  UnalignedBytestring LeftPacked ->
   Unaligned RightPacked Word16 ->
-  UnalignedBytestring
+  UnalignedBytestring LeftPacked
 pushWord (bs :> (Unaligned lastByte m)) (Unaligned word n) =
   let unusedLeft =  m
       usedLeft = 8 - unusedLeft
@@ -111,5 +116,4 @@ pushWord (bs :> (Unaligned lastByte m)) (Unaligned word n) =
           (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
             :> Unaligned (rightByte shiftedRestOfWord) resultUnused
 
-takeWord :: 
-    
+
