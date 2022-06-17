@@ -21,15 +21,15 @@ import GHC.Exts
 
 type Bitcount = Word
 
-data Packing = RightPacked | LeftPacked
+data Orientation = LeftOpen | RightOpen
 
 
-type family IsPacking a where
-  IsPacking RightPacked = 'True
-  IsPacking LeftPacked = 'True
-  IsPacking a = 'False
+type family IsOrientation a where
+  IsOrientation LeftOpen = 'True
+  IsOrientation RightOpen = 'True
+  IsOrientation a = 'False
 
-data Unaligned (p :: Packing) integral = Unaligned integral Int 
+data Unaligned (p :: Orientation) integral = Unaligned integral Int 
   deriving (Eq)
 
 
@@ -44,8 +44,8 @@ class (Integral (EmbeddedWord a), FiniteBits (EmbeddedWord a)) => UnalignedConta
 -- | gives the number corresponding to a mask of size wordSize with a number of unsetBits unset at the left end of the mask.
 makeMask setBits = 2 ^ setBits - 1
 
-instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightPacked i) where
-  type EmbeddedWord (Unaligned 'RightPacked i) = i
+instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftOpen i) where
+  type EmbeddedWord (Unaligned 'LeftOpen i) = i
   usedBits (Unaligned _ n) = n
   makeUnaligned integral n = Unaligned unusedToZero n
    where
@@ -53,8 +53,8 @@ instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightPacke
       let mask = fromIntegral $ makeMask n
        in fromIntegral $ mask .&. integral
 
-instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked i) where
-  type EmbeddedWord (Unaligned 'LeftPacked i) = i
+instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightOpen i) where
+  type EmbeddedWord (Unaligned 'RightOpen i) = i
   usedBits (Unaligned _ n) = n
   makeUnaligned integral n = Unaligned unusedToZero n
    where
@@ -68,16 +68,16 @@ instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftPacked
 instance (Show i) => Show (Unaligned p i) where
   show (Unaligned x _) = show x
 
--- | Non-empty Bytestring with designated incomplete last byte. This way, there is no need to deal with emptiness here, as the byte to be operated upon can be obtained by simple pattern matching.
-data UnalignedBytestring (p :: Packing) where
-    (:>) :: ByteString -> Unaligned LeftPacked Word8 -> UnalignedBytestring LeftPacked
-    (:<) :: Unaligned RightPacked Word8 -> ByteString -> UnalignedBytestring RightPacked
+-- | Non-empty Bytestring with designated incomplete first or last byte. This way, there is no need to deal with emptiness here, as the byte to be operated upon can be obtained by simple pattern matching.
+data UnalignedBytestring (p :: Orientation) where
+    (:>) :: ByteString -> Unaligned RightOpen Word8 -> UnalignedBytestring RightOpen
+    (:<) :: Unaligned LeftOpen Word16 -> ByteString -> UnalignedBytestring LeftOpen
 
 deriving instance Show (UnalignedBytestring p)
 
 
--- | get the last (unaligned) byte of an UnalignedBytestring LeftPacked
-lastByte :: UnalignedBytestring LeftPacked -> Unaligned LeftPacked Word8
+-- | get the last (unaligned) byte of an UnalignedBytestring RightOpen
+lastByte :: UnalignedBytestring RightOpen -> Unaligned RightOpen Word8
 lastByte (_ :> w) = w
 
 -- | Get the left byte of a 16 Bit word
@@ -96,9 +96,9 @@ combineTwoBytes leftByte rightByte =
 
 -- | push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring. 
 pushWord ::
-  UnalignedBytestring LeftPacked ->
-  Unaligned RightPacked Word16 ->
-  UnalignedBytestring LeftPacked
+  UnalignedBytestring RightOpen ->
+  Unaligned LeftOpen Word16 ->
+  UnalignedBytestring RightOpen
 pushWord (bs :> (Unaligned lastByte usedLeft)) (Unaligned word usedRight) =
   let unusedLeft = 8 - usedLeft
       unusedRight = 16 - usedRight
@@ -119,3 +119,8 @@ pushWord (bs :> (Unaligned lastByte usedLeft)) (Unaligned word usedRight) =
             :> Unaligned (rightByte shiftedRestOfWord) (8 - resultUnused)
 
 
+-- | take a word from an unaligned right-packed Bytestring
+--
+
+takeWord :: UnalignedBytestring 'LeftOpen -> Int -> Unaligned 'LeftOpen Word16
+takeWord = undefined

@@ -19,23 +19,23 @@ main = hspec $ do
 
     it "Test smart constructors" $ do
         makeUnaligned (65535::Word16) 8 `shouldBe` 
-            (Unaligned (255::Word16) 8 ::(Unaligned 'RightPacked Word16))
+            (Unaligned (255::Word16) 8 ::(Unaligned 'LeftOpen Word16))
         makeUnaligned (65535::Word16) 11 `shouldBe` 
-            (Unaligned (65504::Word16) 11 ::(Unaligned 'LeftPacked Word16))
+            (Unaligned (65504::Word16) 11 ::(Unaligned 'RightOpen Word16))
 
     it "Test the results of pushing an unaligned word onto a ByteString" $ do
       let (bs :> unfinished) =
             pushWord
-              ((empty :> Unaligned 128 1) :: UnalignedBytestring 'LeftPacked)
-              (Unaligned (256 + 255) 9 :: Unaligned 'RightPacked Word16)
+              ((empty :> Unaligned 128 1) :: UnalignedBytestring 'RightOpen)
+              (Unaligned (256 + 255) 9 :: Unaligned 'LeftOpen Word16)
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned (128 + 64) 2 
 
       let (bs :> unfinished) =
             pushWord
-                ((empty :> Unaligned 254 7) :: UnalignedBytestring 'LeftPacked)
-                (Unaligned 65535 16 :: Unaligned 'RightPacked Word16)
+                ((empty :> Unaligned 254 7) :: UnalignedBytestring 'RightOpen)
+                (Unaligned 65535 16 :: Unaligned 'LeftOpen Word16)
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` Unaligned 254 7
