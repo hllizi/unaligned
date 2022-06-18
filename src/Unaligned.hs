@@ -24,17 +24,16 @@ type Bitcount = Word
 data Orientation = LeftOpen | RightOpen
 
 
-type family IsOrientation a where
-  IsOrientation LeftOpen = 'True
-  IsOrientation RightOpen = 'True
-  IsOrientation a = 'False
-
 data Unaligned (p :: Orientation) integral = Unaligned integral Int 
   deriving (Eq)
 
+-- | Obtain the type of integral used from an Unaligned object.
+type family EmbeddedWord a where
+    EmbeddedWord (Unaligned 'LeftOpen i) = i
+    EmbeddedWord (Unaligned 'RightOpen i) = i
 
+-- | This class requires the implementation of a method to obtain the number of bits that are in use in the embedded integral and a smart constructor that ascertain that all unused bits are set to zero.
 class (Integral (EmbeddedWord a), FiniteBits (EmbeddedWord a)) => UnalignedContainer a where
-  type EmbeddedWord a :: *
   usedBits :: a -> Int
   makeUnaligned :: 
             EmbeddedWord a -> 
@@ -45,7 +44,6 @@ class (Integral (EmbeddedWord a), FiniteBits (EmbeddedWord a)) => UnalignedConta
 makeMask setBits = 2 ^ setBits - 1
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftOpen i) where
-  type EmbeddedWord (Unaligned 'LeftOpen i) = i
   usedBits (Unaligned _ n) = n
   makeUnaligned integral n = Unaligned unusedToZero n
    where
@@ -54,7 +52,6 @@ instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftOpen i
        in fromIntegral $ mask .&. integral
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'RightOpen i) where
-  type EmbeddedWord (Unaligned 'RightOpen i) = i
   usedBits (Unaligned _ n) = n
   makeUnaligned integral n = Unaligned unusedToZero n
    where
@@ -88,6 +85,7 @@ leftByte word = fromIntegral $ shiftR word 8
 rightByte :: Word16 -> Word8
 rightByte word = fromIntegral $ word .&. 255
 
+-- | Combine to bytes into a Word16
 combineTwoBytes :: Word8 -> Word8 -> Word16
 combineTwoBytes leftByte rightByte =
   let leftByte16 = fromIntegral @_ @Word16 leftByte
@@ -123,4 +121,14 @@ pushWord (bs :> (Unaligned lastByte usedLeft)) (Unaligned word usedRight) =
 --
 
 takeWord :: UnalignedBytestring 'LeftOpen -> Int -> Unaligned 'LeftOpen Word16
-takeWord = undefined
+takeWord ((Unaligned word used) :< bs) numberOfBits = 
+     let uninterestingBits = 16 - numberOfBits
+      in
+     if uninterestingBits >= 0 then
+      let 
+         adjustedWord = shiftL word (16 - used) 
+         mask = makeMask numberOfBits
+         maskedWord = adjustedWord .&. mask 
+        in 
+           Unaligned maskedWord numberOfBits
+     else error "cannot extract more than 16 Bits from a Word16"

@@ -43,3 +43,10 @@ main = hspec $ do
     it "make mask for half of a byte, zeroes left" $ do
         makeMask 4 `shouldBe` 15
         makeMask 4 `shouldBe` 15
+
+    it "test takeWord" $ do
+        let unalignedBs = (Unaligned (combineTwoBytes 1 1) 16 :< empty)
+         in
+          do
+            takeWord unalignedBs 9 `shouldBe` Unaligned 257 9
+            
