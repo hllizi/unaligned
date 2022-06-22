@@ -39,7 +39,7 @@ class (Integral (EmbeddedWord a), FiniteBits (EmbeddedWord a)) => UnalignedConta
     Int ->
     a
 
--- | gives the number corresponding to a mask of size wordSize with a number of unsetBits unset at the left end of the mask.
+-- | Gives the number corresponding to a mask of size wordSize with a number of unsetBits unset at the left end of the mask.
 makeMask setBits = 2 ^ setBits - 1
 
 instance (Integral i, FiniteBits i) => UnalignedContainer (Unaligned 'LeftOpen i) where
@@ -71,7 +71,7 @@ data UnalignedBytestring (p :: Orientation) where
 
 deriving instance Show (UnalignedBytestring p)
 
--- | get the last (unaligned) byte of an UnalignedBytestring RightOpen
+-- | Get the last (unaligned) byte of an UnalignedBytestring RightOpen
 lastByte :: UnalignedBytestring RightOpen -> Unaligned RightOpen Word8
 lastByte (_ :> w) = w
 
@@ -90,7 +90,7 @@ combineTwoBytes leftByte rightByte =
       rightByte16 = fromIntegral @_ @Word16 rightByte
    in shiftL leftByte16 8 `xor` rightByte16
 
--- | push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
+-- | Push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
 pushWord ::
   UnalignedBytestring RightOpen ->
   Unaligned LeftOpen Word16 ->
@@ -114,7 +114,7 @@ pushWord (bs :> (Unaligned lastByte usedLeft)) (Unaligned word usedRight) =
           (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
             :> Unaligned (rightByte shiftedRestOfWord) (8 - resultUnused)
 
--- | take a word from an unaligned right-packed Bytestring
+-- | Take a Word16 from an unaligned right-packed Bytestring
 takeWord :: UnalignedBytestring 'LeftOpen -> Int -> Maybe Word16
 takeWord ((Unaligned byte used) :< bs) numberOfBits =
     let numberOfBitsNotFromFirstByte = numberOfBits - used
@@ -146,8 +146,9 @@ takeWord ((Unaligned byte used) :< bs) numberOfBits =
       | otherwise =
         Just $ word `xor` shiftR (fromIntegral $ BS.head bs) (8 - numberOfBits)
 
---Helpers
---
+
+-- Helpers
+
 
 -- | Determine the number of Bytes needed to contain a number of bits.
 minBytes :: Int -> Int
