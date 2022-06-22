@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "src"
+      component: "lib:LZW"
+
+    - path: "app/Main.hs"
+      component: "LZW:exe:LZW"
+
+    - path: "tests"
+      component: "LZW:test:unaligned-tests"
