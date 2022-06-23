@@ -38,6 +38,22 @@ main = hspec $ do
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` RightOpen 254 7
+      let  (bs :> unfinished) =
+            pushWord
+                Empty
+                (LeftOpen 15 4)
+       in do 
+           bs `shouldBe` empty 
+           unfinished `shouldBe` RightOpen 240 4
+
+      let  (bs :> unfinished) =
+            pushWord
+                Empty
+                (LeftOpen 257 9)
+       in do 
+           BS.last bs `shouldBe` 128 
+           unfinished `shouldBe` RightOpen 128 1
+
 
     it "make mask for half of a byte, zeroes left" $ do
       makeMask 4 `shouldBe` 15

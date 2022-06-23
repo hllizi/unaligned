@@ -55,9 +55,10 @@ instance (Show i) => Show (LeftOpen i) where
 instance (Show i) => Show (RightOpen i) where
     show (RightOpen x _) = show x
 
--- | Non-empty Bytestring with designated incomplete first or last byte. This way, there is no need to deal with emptiness here, as the byte to be operated upon can be obtained by simple pattern matching.
+-- | Non-empty Bytestring with (if non-empty) designated incomplete first or last byte. 
 data RightOpenByteString = 
-     ByteString :> RightOpen Word8
+       Empty
+     | ByteString :> RightOpen Word8
 
 data LeftOpenByteString =
      LeftOpen Word8 :< ByteString
@@ -111,6 +112,14 @@ pushWord ::
     RightOpenByteString ->
     LeftOpen Word16 ->
     RightOpenByteString 
+pushWord Empty (LeftOpen word usedRight) = 
+            let unusedRight = (16 - usedRight)
+                wordAdjusted = shiftL word unusedRight
+             in if usedRight <= 8
+                    then BS.empty :> RightOpen (leftByte wordAdjusted) usedRight
+                    else 
+                           (singleton . leftByte $ wordAdjusted) 
+                        :> RightOpen (rightByte wordAdjusted) (8 - unusedRight)
 pushWord (bs :> (RightOpen lastByte usedLeft)) (LeftOpen word usedRight) =
     let unusedLeft = 8 - usedLeft
         unusedRight = 16 - usedRight
