@@ -70,6 +70,26 @@ data UnalignedBytestring (p :: Orientation) where
   (:<) :: Unaligned LeftOpen Word8 -> ByteString -> UnalignedBytestring LeftOpen
 
 deriving instance Show (UnalignedBytestring p)
+deriving instance Eq (UnalignedBytestring p)
+
+-- | Smart Constructor for UnalignedBytestring RightOpen
+
+makeUnalignedRightOpenByteString :: ByteString -> Int -> Maybe (UnalignedBytestring RightOpen)
+makeUnalignedRightOpenByteString bs used =
+    if BS.null bs 
+        then Nothing 
+        else    Just 
+              $ BS.take (BS.length bs - 1) bs :> makeUnaligned (BS.last bs) used
+
+-- | Smart Constructor for UnalignedBytestring LeftOpen
+
+makeUnalignedLeftOpenByteString :: ByteString -> Int -> Maybe (UnalignedBytestring LeftOpen)
+makeUnalignedLeftOpenByteString bs used =
+    if BS.null bs 
+        then Nothing 
+        else    Just 
+              $ makeUnaligned (BS.head bs) used :< BS.tail bs 
+
 
 -- | Get the last (unaligned) byte of an UnalignedBytestring RightOpen
 lastByte :: UnalignedBytestring RightOpen -> Unaligned RightOpen Word8

@@ -1,10 +1,10 @@
 cradle:
   cabal:
     - path: "src"
-      component: "lib:LZW"
+      component: "lib:Unaligned"
 
     - path: "app/Main.hs"
-      component: "LZW:exe:LZW"
+      component: "Unaligned:exe:Unaligned"
 
     - path: "tests"
-      component: "LZW:test:unaligned-tests"
+      component: "Unaligned:test:unaligned-tests"

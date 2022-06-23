@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE GADTs #-}
 
@@ -56,3 +57,21 @@ main = hspec $ do
         minBytes 7 `shouldBe` 1
         minBytes 8 `shouldBe` 1
         minBytes 9 `shouldBe` 2 
+
+    it "test makeUnalignedRightOpenByteString" $ do
+        makeUnalignedRightOpenByteString BS.empty 8 `shouldBe` Nothing
+        let Just (bs  :> (Unaligned integral n :: Unaligned 'RightOpen Word8)) = 
+             makeUnalignedRightOpenByteString (2 `cons` 255 `cons` empty) 4 
+         in do
+            integral `shouldBe` 240 
+            n `shouldBe` 4
+            bs `shouldBe` 2 `cons` empty
+
+    it "test makeUnalignedLeftOpenByteString" $ do
+        makeUnalignedLeftOpenByteString BS.empty 8 `shouldBe` Nothing
+        let Just ((Unaligned integral n :: Unaligned 'LeftOpen Word8) :< bs) = 
+             makeUnalignedLeftOpenByteString (255 `cons` 2 `cons` empty) 4 
+         in do
+            integral `shouldBe` 15
+            n `shouldBe` 4
+            bs `shouldBe` 2 `cons`empty

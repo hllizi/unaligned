@@ -10,7 +10,7 @@ let
             {
               overrides = haskellPackagesNew: haskellPackagesOld:
               rec  {
-                lzw = haskellPackagesNew.callPackage ./LZW.nix { };
+                unaligned = haskellPackagesNew.callPackage ./unaligned.nix { };
               };
             };
           };
@@ -21,5 +21,5 @@ let
 in
   {pkgs ? import <nixpkgs> {inherit overlays;}}:
   {
-    lzw = pkgs.haskell.packages."${compiler}".lzw;
+    unaligned = pkgs.haskell.packages."${compiler}".unaligned;
   }
