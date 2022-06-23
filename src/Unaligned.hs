@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Unaligned where
 
@@ -22,6 +23,12 @@ import GHC.Exts
 type Bitcount = Word
 
 data Orientation = LeftOpen | RightOpen
+
+-- | To use Orientation in contexts
+
+type family IsOrientation (t :: Orientation) :: Constraint where
+    IsOrientation LeftOpen = ()
+    IsOrientation RightOpen = ()
 
 data Unaligned (p :: Orientation) integral = Unaligned integral Int
   deriving (Eq)
@@ -72,23 +79,35 @@ data UnalignedBytestring (p :: Orientation) where
 deriving instance Show (UnalignedBytestring p)
 deriving instance Eq (UnalignedBytestring p)
 
--- | Smart Constructor for UnalignedBytestring RightOpen
+type family ByteStringOrientation a where
+    ByteStringOrientation (UnalignedBytestring o) = o
+-- | Provide a common interface for LeftOpen and RightOpen ByteStrings
+class UnalignedByteStringInterface i where
+-- | Smart Constructor for UnalignedBytestring 
+    makeUnalignedByteString :: 
+           ByteString 
+        -> Int 
+        -> Maybe (UnalignedBytestring (ByteStringOrientation i)) 
+-- | UnalignedBytestring to ByteString
+    toString :: UnalignedBytestring (ByteStringOrientation i) -> ByteString
 
-makeUnalignedRightOpenByteString :: ByteString -> Int -> Maybe (UnalignedBytestring RightOpen)
-makeUnalignedRightOpenByteString bs used =
-    if BS.null bs 
+
+instance UnalignedByteStringInterface (UnalignedBytestring 'RightOpen)  where
+    makeUnalignedByteString bs used =
+     if BS.null bs 
         then Nothing 
         else    Just 
               $ BS.take (BS.length bs - 1) bs :> makeUnaligned (BS.last bs) used
+    toString (Unaligned byte n :< bs) = BS.singleton byte `append` bs
 
--- | Smart Constructor for UnalignedBytestring LeftOpen
 
-makeUnalignedLeftOpenByteString :: ByteString -> Int -> Maybe (UnalignedBytestring LeftOpen)
-makeUnalignedLeftOpenByteString bs used =
-    if BS.null bs 
+instance UnalignedByteStringInterface (UnalignedBytestring 'LeftOpen)  where
+    makeUnalignedByteString bs used =
+     if BS.null bs 
         then Nothing 
         else    Just 
               $ makeUnaligned (BS.head bs) used :< BS.tail bs 
+    toString (bs :> Unaligned byte n) = bs `append` BS.singleton byte
 
 
 -- | Get the last (unaligned) byte of an UnalignedBytestring RightOpen
