@@ -45,10 +45,12 @@ main = hspec $ do
         makeMask 4 `shouldBe` 15
 
     it "test takeWord" $ do
-        let unalignedBs = (Unaligned 1 1 :< (127 `BS.cons` empty))
+        let unalignedBs1 = (Unaligned 1 1 :< (127 `BS.cons` empty))
+            unalignedBs2 = (Unaligned 1 1 :< (255 `BS.cons` empty))
          in
           do
-            takeWord unalignedBs 9 `shouldBe` Just (256 + 127) 
+            takeWord unalignedBs1 9 `shouldBe` Just (256 + 127) 
+            takeWord unalignedBs2 9 `shouldBe` Just (256 + 128 + 127) 
             
     it "test minBytes" $ do
         minBytes 7 `shouldBe` 1
