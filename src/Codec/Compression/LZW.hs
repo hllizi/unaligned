@@ -5,6 +5,7 @@
 
 module Codec.Compression.LZW where
 
+import Control.Monad.State
 import Data.ByteString as BS
 import Data.Map as Map
 import Data.Proxy
@@ -21,37 +22,42 @@ initialMap =
     Map.empty
     [1 .. 255]
 
+type CompressState = (Map (Word16, Word16) Word16, Word16, RightOpenByteString)
+
 compress :: CodeLength -> ByteString -> ByteString
 compress codeLength bs =
   if BS.null bs
     then BS.empty
     else
       toByteString $
-        compressWithMap
+        evalState
+          ( compressWithMap
+              (Just (fromIntegral $ BS.head bs))
+              (BS.tail bs)
+          )
           (Map.empty, 255, EmptyROBs)
-          (Just (fromIntegral $ BS.head bs))
-          (BS.tail bs)
   where
     compressWithMap ::
-      (Map (Word16, Word16) Word16, Word16, RightOpenByteString) ->
       Maybe Word16 ->
       ByteString ->
-      RightOpenByteString
-    compressWithMap (map, highestCode, acc) buffer bs
-      | BS.null bs =
-        maybe
-          EmptyROBs
-          ( \bufferContent ->
-              pushWord
-                acc
-                (LeftOpen bufferContent codeLength)
-          )
-          buffer
-      | otherwise =
+      State CompressState RightOpenByteString
+    compressWithMap buffer bs
+      | BS.null bs = do
+        (map, highestCode, acc) <- get
+        return $
+          maybe
+            EmptyROBs
+            ( \bufferContent ->
+                pushWord
+                  acc
+                  (LeftOpen bufferContent codeLength)
+            )
+            buffer
+      | otherwise = do
+        (map, highestCode, acc) <- get
         let next = fromIntegral $ BS.head bs :: Word16
          in maybe
               ( compressWithMap
-                  (map, highestCode, acc)
                   (Just next)
                   (BS.tail bs)
               )
@@ -60,15 +66,17 @@ compress codeLength bs =
                    in case Map.lookup extendedBuffer map of
                         Just code ->
                           compressWithMap
-                            (map, highestCode, acc)
                             (Just code)
                             (BS.tail bs)
                         Nothing ->
                           let newAcc = pushBuffer extendedBuffer acc
-                           in compressWithMap
-                                (update (map, highestCode, newAcc) extendedBuffer)
-                                Nothing
-                                (BS.tail bs)
+                              newState = 
+                               update (map, highestCode, newAcc) extendedBuffer
+                           in do
+                                put newState
+                                compressWithMap
+                                  Nothing
+                                  (BS.tail bs)
               )
               buffer
     pushBuffer buffer =
