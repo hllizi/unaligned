@@ -1,18 +1,25 @@
-let lzwOverlay = final: prev:
-{
+let 
+  compiler = "ghc8107";
+  overlays = [(
+    final: prev:
 
-  haskellPackages = prev.haskellPackages.override 
-  rec   {
-    overrides = haskellPackagesNew: haskellPackagesOld:
-    {
-      lzw = haskellPackagesNew.callPackage ./LZW.nix { };
-    };
-  };
-};
+      rec {
+        haskell = prev.haskell // { 
+          packages = prev.haskell.packages // {
+            "${compiler}" = prev.haskell.packages."${compiler}".override 
+            {
+              overrides = haskellPackagesNew: haskellPackagesOld:
+              rec  {
+                unaligned = haskellPackagesNew.callPackage ./unaligned.nix { };
+              };
+            };
+          };
+        };
+      }
+    )
+  ];
 in
-  {pkgs ? import <nixpkgs> {overlays = [
-    lzwOverlay
-  ];}}:
+  {pkgs ? import <nixpkgs> {inherit overlays;}}:
   {
-    lzw = pkgs.haskellPackages.lzw;
+    unaligned = pkgs.haskell.packages."${compiler}".unaligned;
   }

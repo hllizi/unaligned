@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "src"
+      component: "lib:Unaligned"
+
+    - path: "app/Main.hs"
+      component: "Unaligned:exe:Unaligned"
+
+    - path: "tests"
+      component: "Unaligned:test:unaligned-tests"
