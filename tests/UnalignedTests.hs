@@ -5,9 +5,11 @@ module Main where
 
 import Data.ByteString as BS
 import Data.Word
+import Debug.Trace
 import Test.Hspec
 import Test.QuickCheck
 import Unaligned
+import qualified Data.BitString.BigEndian    as BitSt
 
 main :: IO ()
 main = hspec $ do
@@ -38,23 +40,29 @@ main = hspec $ do
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` RightOpen 254 7
-      let  (bs :> unfinished) =
+      let (bs :> unfinished) =
             pushWord
-                Empty
-                (LeftOpen 15 4)
-       in do 
-           bs `shouldBe` empty 
-           unfinished `shouldBe` RightOpen 240 4
+              EmptyROBs
+              (LeftOpen 15 4)
+       in do
+            bs `shouldBe` empty
+            unfinished `shouldBe` RightOpen 240 4
 
-      let  (bs :> unfinished) =
+      let (bs :> unfinished) =
             pushWord
-                Empty
-                (LeftOpen 257 9)
-       in do 
-           BS.last bs `shouldBe` 128 
-           unfinished `shouldBe` RightOpen 128 1
+              EmptyROBs
+              (LeftOpen 257 9)
+       in do
+            BS.last bs `shouldBe` 128
+            unfinished `shouldBe` RightOpen 128 1
 
-
+      let base = EmptyROBs
+          first = LeftOpen 1 9
+          second = LeftOpen 256 9
+          result = pushWord (pushWord (pushWord base first) first) second
+          expected = (0 `cons` 128 `cons`  96 `cons` BS.empty) :> RightOpen 0 3
+       in (trace ("result  : " ++ (show $ BitSt.bitString $ toByteString result))) result
+            `shouldBe` (trace ("expected: " ++ (show $ BitSt.bitString $ toByteString expected))) expected
     it "make mask for half of a byte, zeroes left" $ do
       makeMask 4 `shouldBe` 15
       makeMask 4 `shouldBe` 15
@@ -72,8 +80,8 @@ main = hspec $ do
       minBytes 9 `shouldBe` 2
 
     it "test makeRightOpenByteString" $ do
-      makeRightOpenByteString BS.empty 8 `shouldBe` Nothing
-      let Just (bs :> (RightOpen integral n :: RightOpen Word8)) =
+      makeRightOpenByteString BS.empty 8 `shouldBe` EmptyROBs
+      let (bs :> (RightOpen integral n :: RightOpen Word8)) =
             makeRightOpenByteString (2 `cons` 255 `cons` empty) 4
        in do
             integral `shouldBe` 240
@@ -81,9 +89,9 @@ main = hspec $ do
             bs `shouldBe` 2 `cons` empty
 
     it "test makeUnaligned LeftOpen ByteString" $ do
-      makeLeftOpenByteString BS.empty 8 `shouldBe` Nothing
-      let Just ((LeftOpen integral n) :< bs) =
-            makeLeftOpenByteString  (255 `cons` 2 `cons` empty) 4
+      makeLeftOpenByteString BS.empty 8 `shouldBe` EmptyLOBs
+      let ((LeftOpen integral n) :< bs) =
+            makeLeftOpenByteString (255 `cons` 2 `cons` empty) 4
        in do
             integral `shouldBe` 15
             n `shouldBe` 4
