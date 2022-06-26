@@ -22,7 +22,16 @@ initialMap =
     Map.empty
     [1 .. 255]
 
-type CompressState = (Map (Word16, Word16) Word16, Word16, RightOpenByteString)
+data CompressState = CompressState {
+                dictState :: DictionaryState
+            ,   acc :: RightOpenByteString
+            }
+
+data DictionaryState = DictionaryState
+            {
+                dictionary :: Map (Word16, Word16) Word16
+            ,   nextCode :: Word16
+            }
 
 compress :: CodeLength -> ByteString -> ByteString
 compress codeLength bs =
@@ -35,7 +44,9 @@ compress codeLength bs =
               (Just (fromIntegral $ BS.head bs))
               (BS.tail bs)
           )
-          (Map.empty, 255, EmptyROBs)
+          (CompressState    
+            (DictionaryState Map.empty 256) 
+            EmptyROBs)
   where
     compressWithMap ::
       Maybe Word16 ->
@@ -43,7 +54,7 @@ compress codeLength bs =
       State CompressState RightOpenByteString
     compressWithMap buffer bs
       | BS.null bs = do
-        (map, highestCode, acc) <- get
+        CompressState _ acc <- get
         return $
           maybe
             EmptyROBs
@@ -54,9 +65,9 @@ compress codeLength bs =
             )
             buffer
       | otherwise = do
-        (map, highestCode, acc) <- get
-        let next = fromIntegral $ BS.head bs :: Word16
-         in maybe
+            CompressState dictState@(DictionaryState map nextCode) acc <- get
+            let next = fromIntegral $ BS.head bs :: Word16
+             in maybe
               ( compressWithMap
                   (Just next)
                   (BS.tail bs)
@@ -71,7 +82,11 @@ compress codeLength bs =
                         Nothing ->
                           let newAcc = pushBuffer extendedBuffer acc
                               newState = 
-                               update (map, highestCode, newAcc) extendedBuffer
+                               let updatedDictionary =
+                                    update dictState extendedBuffer
+                                in CompressState 
+                                    updatedDictionary
+                                    newAcc
                            in do
                                 put newState
                                 compressWithMap
@@ -84,8 +99,10 @@ compress codeLength bs =
         . pushHelper (fst buffer)
     pushHelper = \word -> flip pushWord (LeftOpen word codeLength)
     update ::
-      (Map (Word16, Word16) Word16, Word16, RightOpenByteString) -> (Word16, Word16) -> (Map (Word16, Word16) Word16, Word16, RightOpenByteString)
-    update (map, highestCode, acc) buffer =
-      if highestCode <= 2 ^ codeLength - 1
-        then (insert buffer (highestCode + 1) map, highestCode + 1, acc)
-        else (map, highestCode, acc)
+      DictionaryState -> (Word16, Word16) -> DictionaryState
+    update dictState@(DictionaryState map nextCode) buffer =
+      if nextCode <= 2 ^ codeLength - 1
+        then DictionaryState 
+                (insert buffer nextCode map) 
+                (nextCode + 1)
+        else dictState
