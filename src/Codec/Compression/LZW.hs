@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -22,16 +23,15 @@ initialMap =
     Map.empty
     [1 .. 255]
 
-data CompressState = CompressState {
-                dictState :: DictionaryState
-            ,   acc :: RightOpenByteString
-            }
+data CompressState = CompressState
+  { dictState :: CompressDictionaryState,
+    acc :: RightOpenByteString
+  }
 
-data DictionaryState = DictionaryState
-            {
-                dictionary :: Map (Word16, Word16) Word16
-            ,   nextCode :: Word16
-            }
+data CompressDictionaryState = CompressDictionaryState
+  { dictionary :: Map (Word16, Word16) Word16,
+    nextCode :: Word16
+  }
 
 compress :: CodeLength -> ByteString -> ByteString
 compress codeLength bs =
@@ -44,9 +44,10 @@ compress codeLength bs =
               (Just (fromIntegral $ BS.head bs))
               (BS.tail bs)
           )
-          (CompressState    
-            (DictionaryState Map.empty 256) 
-            EmptyROBs)
+          ( CompressState
+              (CompressDictionaryState Map.empty 256)
+              EmptyROBs
+          )
   where
     compressWithMap ::
       Maybe Word16 ->
@@ -65,9 +66,9 @@ compress codeLength bs =
             )
             buffer
       | otherwise = do
-            CompressState dictState@(DictionaryState map nextCode) acc <- get
-            let next = fromIntegral $ BS.head bs :: Word16
-             in maybe
+        CompressState dictState@(CompressDictionaryState map nextCode) acc <- get
+        let next = fromIntegral $ BS.head bs :: Word16
+         in maybe
               ( compressWithMap
                   (Just next)
                   (BS.tail bs)
@@ -81,12 +82,12 @@ compress codeLength bs =
                             (BS.tail bs)
                         Nothing ->
                           let newAcc = pushBuffer extendedBuffer acc
-                              newState = 
-                               let updatedDictionary =
-                                    update dictState extendedBuffer
-                                in CompressState 
-                                    updatedDictionary
-                                    newAcc
+                              newState =
+                                let updatedDictionary =
+                                      update dictState extendedBuffer
+                                 in CompressState
+                                      updatedDictionary
+                                      newAcc
                            in do
                                 put newState
                                 compressWithMap
@@ -99,10 +100,36 @@ compress codeLength bs =
         . pushHelper (fst buffer)
     pushHelper = \word -> flip pushWord (LeftOpen word codeLength)
     update ::
-      DictionaryState -> (Word16, Word16) -> DictionaryState
-    update dictState@(DictionaryState map nextCode) buffer =
+      CompressDictionaryState -> (Word16, Word16) -> CompressDictionaryState
+    update dictState@(CompressDictionaryState map nextCode) buffer =
       if nextCode <= 2 ^ codeLength - 1
-        then DictionaryState 
-                (insert buffer nextCode map) 
-                (nextCode + 1)
+        then
+          CompressDictionaryState
+            (insert buffer nextCode map)
+            (nextCode + 1)
         else dictState
+
+data DecompressState = DecompressState
+  { dictState :: DecompressDictionaryState,
+    acc :: BS.ByteString
+  }
+
+data DecompressDictionaryState = DecompressDictionaryState
+  { dictionary :: Map (Word16, Word16) Word16,
+    nextCode :: Word16
+  }
+
+decompInitial = DecompressState (DecompressDictionaryState Map.empty 256) BS.empty
+
+decompress :: CodeLength -> ByteString -> ByteString
+decompress codeLength compressed =
+  let input = makeLeftOpenByteString compressed 0
+   in evalState (decompressHelper input) decompInitial
+  where
+    decompressHelper :: LeftOpenByteString -> State DecompressState ByteString
+    decompressHelper input =
+      let maybeNextBytes =
+            do
+              word <- takeWord input codeLength
+              undefined
+       in undefined
