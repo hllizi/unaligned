@@ -41,7 +41,7 @@ compress codeLength bs =
   if BS.null bs
     then BS.empty
     else
-      ( evalState
+       evalState
           ( compressWithMap
               (Just (fromIntegral $ BS.head bs))
               (BS.tail bs)
@@ -50,7 +50,6 @@ compress codeLength bs =
               (CompressDictionaryState Map.empty 256)
               (RightOpen 0 0)
           )
-      )
   where
     compressWithMap ::
       Maybe Word16 ->
