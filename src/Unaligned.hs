@@ -93,6 +93,9 @@ instance ToByteString LeftOpenByteString where
     toByteString (LeftOpen byte n :< bs) = singleton byte `BS.append` bs 
     toByteString EmptyLOBs = BS.empty
 
+instance ToByteString (ByteString, RightOpen Word8) where
+    toByteString (bs, RightOpen word _) = bs `snoc` word
+
 -- | Get the left byte of a 16 Bit word
 leftByte :: Word16 -> Word8
 leftByte word = fromIntegral $ shiftR word 8

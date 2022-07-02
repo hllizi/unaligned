@@ -1,12 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Codec.Compression.LZW where
 
 import Control.Monad.State
+import Data.Bifunctor
 import Data.ByteString as BS
 import Data.Map as Map
 import Data.Proxy
@@ -25,7 +27,8 @@ initialMap =
 
 data CompressState = CompressState
   { dictState :: CompressDictionaryState,
-    acc :: RightOpenByteString
+    acc :: ByteString,
+    unfinishedByte :: RightOpen Word8
   }
 
 data CompressDictionaryState = CompressDictionaryState
@@ -38,35 +41,36 @@ compress codeLength bs =
   if BS.null bs
     then BS.empty
     else
-      toByteString $
-        evalState
+      maybe "" toByteString
+        (evalState
           ( compressWithMap
               (Just (fromIntegral $ BS.head bs))
               (BS.tail bs)
           )
           ( CompressState
               (CompressDictionaryState Map.empty 256)
-              EmptyROBs
-          )
+              ""
+              (RightOpen 0 0)
+          ))
   where
     compressWithMap ::
       Maybe Word16 ->
       ByteString ->
-      State CompressState RightOpenByteString
+      State CompressState (Maybe (ByteString, RightOpen Word8))
     compressWithMap buffer bs
       | BS.null bs = do
-        CompressState _ acc <- get
+        CompressState _ acc unfinished <- get
         return $
-          maybe
-            EmptyROBs
-            ( \bufferContent ->
-                pushWord
-                  acc
-                  (LeftOpen bufferContent codeLength)
-            )
-            buffer
+          ( \bufferContent ->
+              (acc `append`) `first` 
+                mergeWord
+                 unfinished
+                 (LeftOpen bufferContent codeLength)
+          )
+            <$> buffer
       | otherwise = do
-        CompressState dictState@(CompressDictionaryState map nextCode) acc <- get
+        CompressState dictState@(CompressDictionaryState map nextCode) acc unfinished <-
+          get
         let next = fromIntegral $ BS.head bs :: Word16
          in maybe
               ( compressWithMap
@@ -81,13 +85,15 @@ compress codeLength bs =
                             (Just code)
                             (BS.tail bs)
                         Nothing ->
-                          let newAcc = pushBuffer extendedBuffer acc
+                          let (accExtension, newUnfinished) =
+                                mergeBuffer extendedBuffer unfinished
                               newState =
                                 let updatedDictionary =
                                       update dictState extendedBuffer
                                  in CompressState
                                       updatedDictionary
-                                      newAcc
+                                      (acc `append` accExtension)
+                                      newUnfinished
                            in do
                                 put newState
                                 compressWithMap
@@ -95,10 +101,12 @@ compress codeLength bs =
                                   (BS.tail bs)
               )
               buffer
-    pushBuffer buffer =
-      pushHelper (snd buffer)
-        . pushHelper (fst buffer)
-    pushHelper = \word -> flip pushWord (LeftOpen word codeLength)
+    mergeBuffer buffer unfinished =
+      let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) unfinished
+       in (intermediateAcc `append`)
+            `first` mergeHelper (snd buffer) intermediateUnfinished
+
+    mergeHelper = \word -> flip mergeWord (LeftOpen word codeLength)
     update ::
       CompressDictionaryState -> (Word16, Word16) -> CompressDictionaryState
     update dictState@(CompressDictionaryState map nextCode) buffer =
