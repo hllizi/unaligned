@@ -57,6 +57,14 @@ main = hspec $ do
             BS.last bs `shouldBe` 128 
             unfinished `shouldBe` RightOpen 128 1
 
+      let (bs, unfinished) =
+            mergeWord
+                (RightOpen 255 8)
+                (LeftOpen 15 4)
+       in do
+            BS.last bs `shouldBe` 255
+            unfinished `shouldBe` RightOpen 240 4
+
     it "Test the results of pushing an unaligned word onto a ByteString" $ do
       let (bs :> unfinished) =
             pushWord

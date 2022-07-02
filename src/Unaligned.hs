@@ -175,7 +175,8 @@ pushWord (bs :> (RightOpen lastByte usedLeft)) (LeftOpen word usedRight) =
                 (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
                     :> RightOpen (rightByte shiftedRestOfWord) (8 - resultUnused)
 
- -- | Take a Word16 from an unaligned right-packed Bytestring
+-- | Take a Word16 from an unaligned right-packed Bytestring
+ 
 takeWord :: LeftOpenByteString -> Int -> Maybe Word16
 takeWord ((LeftOpen byte used) :< bs) numberOfBits =
   let numberOfBitsNotFromFirstByte = numberOfBits - used
