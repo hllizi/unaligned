@@ -108,6 +108,38 @@ combineTwoBytes leftByte rightByte =
      rightByte16 = fromIntegral @_ @Word16 rightByte
     in shiftL leftByte16 8 `xor` rightByte16
 
+-- | Place as many of the highest-valued used bits of the second argument in the unused bits of the first and shift the remaining used bits of the second argument to its left edge. Return the results of these operation as a pair of a ByteString of complete byte and and uncomplecte RightOpen byte.
+
+mergeWord :: RightOpen Word8 -> LeftOpen Word16 -> (ByteString, RightOpen Word8)
+mergeWord (RightOpen byte usedLeft) (LeftOpen word usedRight) = 
+    let unusedLeft = 8 - usedLeft -- number of bits unused at the end of the last byte
+        unusedRight = 16 - usedRight -- number of bits unused at the beginning of the word to be pushed
+        shiftValue = unusedRight - usedLeft -- how much (and in which direction) we need to shift to align the used bits of left and right.
+        wordAdjusted =
+            if shiftValue >= 0
+                then shiftL word (fromIntegral shiftValue)
+                else shiftR word (fromIntegral (- shiftValue))
+        filledUpByte = byte `xor` leftByte wordAdjusted
+        shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
+        byteCompleted = unusedLeft <= usedRight
+        resultUnused = mod (unusedLeft + unusedRight) 8
+        resultUsed = (8 - resultUnused)
+     in if not byteCompleted 
+         then 
+          (empty, RightOpen filledUpByte resultUsed)
+         else 
+          if usedRight - resultUnused < 8
+            then
+                (   singleton filledUpByte
+                 ,  RightOpen (leftByte shiftedRestOfWord) resultUsed
+                 )
+            else
+                (   filledUpByte `cons` singleton (leftByte shiftedRestOfWord)
+                 ,  RightOpen (rightByte shiftedRestOfWord) resultUsed
+                 )
+
+
+
 -- | Push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
 pushWord ::
     RightOpenByteString ->
