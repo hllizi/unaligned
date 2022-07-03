@@ -3,7 +3,7 @@
 
 module Main where
 
-import Data.ByteString as BS
+import Data.ByteString.Lazy as BS
 import Data.Word
 import Test.Hspec
 import Test.QuickCheck
@@ -22,7 +22,7 @@ main = hspec $ do
           expected = 0 `cons` 128 `cons` 96 `cons` 0 `cons` BS.empty
 
        in 
-                   trace  ("result:   " ++ (show $ bitString compressed)) $ compressed 
-        `shouldBe` (trace ("expected: " ++ (show $ bitString expected)) $ expected)
+                   trace  ("result:   " ++ show (bitString $ toStrict compressed)) $ compressed 
+        `shouldBe` trace ("expected: " ++ show (bitString $ toStrict expected)) expected
 
 
