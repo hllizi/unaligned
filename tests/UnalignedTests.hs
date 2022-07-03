@@ -4,7 +4,7 @@
 module Main where
 
 import qualified Data.BitString.BigEndian as BitSt
-import Data.ByteString as BS
+import Data.ByteString.Lazy as BS
 import Data.Word
 import Debug.Trace
 import Test.Hspec
@@ -51,16 +51,16 @@ main = hspec $ do
 
       let (bs, unfinished) =
             mergeWord
-              (RightOpen 0 0) 
+              (RightOpen 0 0)
               (LeftOpen 257 9)
        in do
-            BS.last bs `shouldBe` 128 
+            BS.last bs `shouldBe` 128
             unfinished `shouldBe` RightOpen 128 1
 
       let (bs, unfinished) =
             mergeWord
-                (RightOpen 255 8)
-                (LeftOpen 15 4)
+              (RightOpen 255 8)
+              (LeftOpen 15 4)
        in do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` RightOpen 240 4
@@ -102,8 +102,15 @@ main = hspec $ do
           second = LeftOpen 256 9
           result = pushWord (pushWord (pushWord base first) first) second
           expected = (0 `cons` 128 `cons` 96 `cons` BS.empty) :> RightOpen 0 3
-       in (trace ("result  : " ++ (show $ BitSt.bitString $ toByteString result))) result
-            `shouldBe` (trace ("expected: " ++ (show $ BitSt.bitString $ toByteString expected))) expected
+       in trace (  "result  : " 
+                ++ show (BitSt.bitString 
+                            (toStrict $ toByteString result))) 
+                            result
+            `shouldBe` trace 
+                (  "expected: " 
+                ++ show (BitSt.bitString 
+                            (toStrict $ toByteString expected))) 
+                            expected
     it "make mask for half of a byte, zeroes left" $ do
       makeMask 4 `shouldBe` 15
       makeMask 4 `shouldBe` 15

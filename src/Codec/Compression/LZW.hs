@@ -9,7 +9,7 @@ module Codec.Compression.LZW where
 
 import Control.Monad.State
 import Data.Bifunctor
-import Data.ByteString as BS
+import Data.ByteString.Lazy as BS
 import Data.Functor
 import Data.Map as Map
 import Data.Proxy

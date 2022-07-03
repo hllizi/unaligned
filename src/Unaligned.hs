@@ -14,7 +14,7 @@
 module Unaligned where
 
 import Data.Bits
-import Data.ByteString as BS
+import Data.ByteString.Lazy as BS
 import Data.Proxy
 import Data.TypeNums
 import Data.Word
@@ -190,7 +190,7 @@ takeWord ((LeftOpen byte used) :< bs) numberOfBits =
       where
          additionalBytes :: Maybe ByteString
          additionalBytes =
-                 let numberOfNeededBytes = minBytes (numberOfBits - used)
+                 let numberOfNeededBytes = fromIntegral (minBytes $ numberOfBits - used)
                    in if BS.length bs >= numberOfNeededBytes
                         then Just (BS.take numberOfNeededBytes bs)
                         else Nothing
@@ -198,7 +198,7 @@ takeWord ((LeftOpen byte used) :< bs) numberOfBits =
          fitIn numberOfBits bs word
            | numberOfBits == 0 = Just word
            | numberOfBits > 8 =
-               if BS.length bs >= minBytes numberOfBits
+               if BS.length bs >= fromIntegral (minBytes numberOfBits)
                   then
                    fitIn
                       (numberOfBits - 8)
