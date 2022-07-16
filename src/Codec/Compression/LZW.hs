@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -10,6 +11,8 @@ module Codec.Compression.LZW where
 import Control.Monad.State
 import Data.Bifunctor
 import Data.ByteString.Lazy as BS
+import Data.Either
+import Data.Either.Extra
 import Data.Functor
 import Data.Map as Map
 import Data.Proxy
@@ -41,15 +44,15 @@ compress codeLength bs =
   if BS.null bs
     then BS.empty
     else
-       evalState
-          ( compressWithMap
-              (Just (fromIntegral $ BS.head bs))
-              (BS.tail bs)
-          )
-          ( CompressState
-              (CompressDictionaryState Map.empty 256)
-              (RightOpen 0 0)
-          )
+      evalState
+        ( compressWithMap
+            (Just (fromIntegral $ BS.head bs))
+            (BS.tail bs)
+        )
+        ( CompressState
+            (CompressDictionaryState Map.empty 256)
+            (RightOpen 0 0)
+        )
   where
     compressWithMap ::
       Maybe Word16 ->
@@ -67,10 +70,11 @@ compress codeLength bs =
                       (LeftOpen bufferContent codeLength)
                 )
                 buffer
-        return $ completed `append` 
-            if n == 0
-                then BS.empty
-                else BS.singleton byte
+        return $
+          completed
+            `append` if n == 0
+              then BS.empty
+              else BS.singleton byte
       | otherwise = do
         CompressState
           dictState@(CompressDictionaryState map nextCode)
@@ -128,22 +132,70 @@ data DecompressState = DecompressState
     acc :: BS.ByteString
   }
 
+type DecompressDictionary = Map Word16 (Word16, Word16)
+
 data DecompressDictionaryState = DecompressDictionaryState
-  { dictionary :: Map (Word16, Word16) Word16,
+  { dictionary :: DecompressDictionary,
     nextCode :: Word16
   }
 
 decompInitial = DecompressState (DecompressDictionaryState Map.empty 256) BS.empty
 
-decompress :: CodeLength -> ByteString -> ByteString
+decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress codeLength compressed =
-  let input = makeLeftOpenByteString compressed 0
-   in evalState (decompressHelper input) decompInitial
+  let input = LeftOpenByteString compressed 0
+   in evalStateT (decompressHelper Nothing input) decompInitial
   where
-    decompressHelper :: LeftOpenByteString -> State DecompressState ByteString
-    decompressHelper input =
-      let maybeNextBytes =
-            do
-              word <- takeWord input codeLength
-              undefined
-       in undefined
+    mapElem x = Prelude.elem x . elems
+    unfoldEntry :: DecompressDictionary -> Word16 -> Either String ByteString
+    unfoldEntry dict word =
+      if word < 256
+        then return $ BS.singleton $ fromIntegral word
+        else do
+          (word, byte) <-
+            maybeToEither
+              ( "Compressed data invalid: no entry for code "
+                  <> show word
+              )
+              (Map.lookup word dict)
+          unfoldEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
+
+    decompressHelper ::
+      Maybe Word16 ->
+      LeftOpenByteString ->
+      StateT
+        DecompressState
+        (Either String)
+        ByteString
+    decompressHelper buffer input =
+      do
+        DecompressState
+          { dictState =
+              DecompressDictionaryState
+                { dictionary = decompDict,
+                  nextCode = nextcode
+                },
+            ..
+          } <-
+          get
+        (currentWord, rest) <- lift $ do
+          maybeToEither
+            ( "Could not obtain word of length "
+                <> show codeLength
+                <> " from "
+                <> show compressed
+            )
+            (takeWord input codeLength)
+        output <-
+          if currentWord < 256
+            then pure $ BS.singleton $ fromIntegral currentWord
+            else lift $ unfoldEntry decompDict currentWord
+
+        undefined
+
+--         maybeToEither $
+--             case Map.lookup currentWord (decompressDictionary $ dictState decompressState) of
+--                Just word -> undefined
+--                Nothing -> undefined
+--
+--
