@@ -116,11 +116,12 @@ main = hspec $ do
       makeMask 4 `shouldBe` 15
 
     it "test takeWord" $ do
-      let unalignedBs1 = (LeftOpen 1 1 :< (127 `BS.cons` empty))
-          unalignedBs2 = (LeftOpen 1 1 :< (255 `BS.cons` empty))
+      let unalignedBs1@(LeftOpenByteString bs1 n1) = (LeftOpenByteString (1 `BS.cons` 127 `BS.cons` empty) 1)
+          unalignedBs2@(LeftOpenByteString bs2 n2) = (LeftOpenByteString (1 `BS.cons` 255 `BS.cons` empty) 1)
        in do
-            takeWord unalignedBs1 9 `shouldBe` Just (256 + 127)
-            takeWord unalignedBs2 9 `shouldBe` Just (256 + 128 + 127)
+       --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 9 `shouldBe` Just (256 + 128 + 127, LeftOpenByteString BS.empty 0) 
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 0 `shouldBe` Nothing
 
     it "test minBytes" $ do
       minBytes 7 `shouldBe` 1
@@ -136,11 +137,3 @@ main = hspec $ do
             n `shouldBe` 4
             bs `shouldBe` 2 `cons` empty
 
-    it "test makeUnaligned LeftOpen ByteString" $ do
-      makeLeftOpenByteString BS.empty 8 `shouldBe` EmptyLOBs
-      let ((LeftOpen integral n) :< bs) =
-            makeLeftOpenByteString (255 `cons` 2 `cons` empty) 4
-       in do
-            integral `shouldBe` 15
-            n `shouldBe` 4
-            bs `shouldBe` 2 `cons` empty
