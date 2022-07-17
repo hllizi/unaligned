@@ -143,12 +143,12 @@ decompInitial = DecompressState (DecompressDictionaryState Map.empty 256) BS.emp
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress codeLength compressed =
-  let input = LeftOpenByteString compressed 0
+  let input = LeftOpenByteString compressed 0 codeLength
    in evalStateT (decompressHelper Nothing input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
-    unfoldEntry :: DecompressDictionary -> Word16 -> Either String ByteString
-    unfoldEntry dict word =
+    unpackEntry :: DecompressDictionary -> Word16 -> Either String ByteString
+    unpackEntry dict word =
       if word < 256
         then return $ BS.singleton $ fromIntegral word
         else do
@@ -158,7 +158,7 @@ decompress codeLength compressed =
                   <> show word
               )
               (Map.lookup word dict)
-          unfoldEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
+          unpackEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
 
     decompressHelper ::
       Maybe Word16 ->
@@ -178,18 +178,18 @@ decompress codeLength compressed =
             ..
           } <-
           get
-        (currentWord, rest) <- lift $ do
-          maybeToEither
+        let (maybeCurrent, rest) = takeWord input
+        currentWord <- lift $ maybeToEither
             ( "Could not obtain word of length "
                 <> show codeLength
                 <> " from "
                 <> show compressed
             )
-            (takeWord input codeLength)
+            maybeCurrent
         output <-
           if currentWord < 256
             then pure $ BS.singleton $ fromIntegral currentWord
-            else lift $ unfoldEntry decompDict currentWord
+            else lift $ unpackEntry decompDict currentWord
 
         undefined
 

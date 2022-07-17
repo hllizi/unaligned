@@ -59,7 +59,11 @@ data RightOpenByteString
   | ByteString :> RightOpen Word8
 
 data LeftOpenByteString
-        = LeftOpenByteString ByteString Int
+        = LeftOpenByteString {
+            lobsContent :: ByteString,
+            lobsUsedBitsInFirstByte :: Int,
+            lobsLengthOfNextWord :: Int
+            }
 
 deriving instance Show RightOpenByteString
 
@@ -167,35 +171,38 @@ maybeHead byteString =
     else Just $ BS.head byteString
 
 -- | Take a Word16 from an unaligned Bytestring. Expects wordLegnth to be <= 16.
-takeWord :: LeftOpenByteString -> Int -> Maybe (Word16, LeftOpenByteString)
-takeWord (LeftOpenByteString sourceByteString usedBitsInFirstByte)
-         wordLength
-  | wordLength < 1 = Nothing
-  | otherwise =
-    let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
-        numberOfNeededBytes = ceiling (fromIntegral numberOfBitsNotFromFirstByte / 8) + 1
-     in do
-          (current, rest) <- chopNBytes numberOfNeededBytes
-          let firstByte = fromIntegral (BS.head current) :: Word16
-          let adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
-          let (word, LeftOpen byte n) = 
-                fitIn 
-                   numberOfBitsNotFromFirstByte 
-                   (BS.tail current)
-                   adjustedFirstByte
-          let (usedBits, stringRest) = if n == 0 then (n,rest) else (8,byte `cons` rest)
-          pure (word, LeftOpenByteString stringRest usedBits)
-  where
-    chopNBytes :: Int -> Maybe (ByteString, ByteString)
+takeWord :: LeftOpenByteString -> (Maybe Word16, LeftOpenByteString)
+takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLength)
+ | wordLength < 1 = (Nothing, input) 
+ | otherwise =
+     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
+         numberOfNeededBytes = ceiling (fromIntegral numberOfBitsNotFromFirstByte / 8) + 1
+         (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
+        in
+         maybe
+            (Nothing, input)
+            (\current -> (
+                let firstByte = fromIntegral (BS.head current) :: Word16
+                    adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
+                    (word, LeftOpen byte n) = fitIn 
+                                                numberOfBitsNotFromFirstByte 
+                                                (BS.tail current)
+                                                adjustedFirstByte
+                    (usedBits, stringRest) = 
+                        if n == 0 then (n,rest) else (8,byte `cons` rest)
+                  in
+                (Just word, LeftOpenByteString stringRest usedBits wordLength)))
+            maybeCurrent
+   where
+    chopNBytes :: Int -> (Maybe ByteString, ByteString)
     chopNBytes n = do
       let nTypeAdjusted = fromIntegral n
       if BS.length sourceByteString >= nTypeAdjusted
         then
-          Just
-            ( BS.take nTypeAdjusted sourceByteString,
+            ( Just $ BS.take nTypeAdjusted sourceByteString,
               BS.drop nTypeAdjusted sourceByteString
             )
-        else Nothing
+        else (Nothing, sourceByteString)
 
     fitIn :: Int -> ByteString -> Word16 -> (Word16, LeftOpen Word8)
     fitIn bitsToFitIn bs targetWord

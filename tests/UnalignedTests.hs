@@ -116,12 +116,13 @@ main = hspec $ do
       makeMask 4 `shouldBe` 15
 
     it "test takeWord" $ do
-      let unalignedBs1@(LeftOpenByteString bs1 n1) = (LeftOpenByteString (1 `BS.cons` 127 `BS.cons` empty) 1)
-          unalignedBs2@(LeftOpenByteString bs2 n2) = (LeftOpenByteString (1 `BS.cons` 255 `BS.cons` empty) 1)
+      let unalignedBs1@(LeftOpenByteString bs1 n1 _) = (LeftOpenByteString (1 `BS.cons` 127 `BS.cons` empty) 1 9)
+          unalignedBs2@(LeftOpenByteString bs2 n2 _) = (LeftOpenByteString (1 `BS.cons` 255 `BS.cons` empty) 1 9)
+          unalignedBs3 = unalignedBs2 {lobsLengthOfNextWord = 0 }
        in do
        --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 9 `shouldBe` Just (256 + 128 + 127, LeftOpenByteString BS.empty 0) 
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 0 `shouldBe` Nothing
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2)  `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 0 9) 
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs3)  `shouldBe` (Nothing, unalignedBs3)
 
     it "test minBytes" $ do
       minBytes 7 `shouldBe` 1
