@@ -10,6 +10,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Unaligned where
 
@@ -227,6 +229,11 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
                         ,
                     LeftOpen remainder remainingBits
                     )
+
+pattern w :< rest <- (takeWord -> (Just w, rest))
+pattern Final bs <- (takeWord -> (Nothing, bs))
+pattern Empty <- (takeWord -> (Nothing, LeftOpenByteString _ 0 _))
+
 
 -- Helpers
 
