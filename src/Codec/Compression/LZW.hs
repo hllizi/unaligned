@@ -17,6 +17,7 @@ import Data.Functor
 import Data.Map as Map
 import Data.Proxy
 import Data.Word
+import Debug.Trace
 import Unaligned
 
 type CodeLength = Int
@@ -128,8 +129,7 @@ compress codeLength bs =
         else dictState
 
 data DecompressState = DecompressState
-  { dictState :: DecompressDictionaryState,
-    acc :: BS.ByteString
+  { dictState :: DecompressDictionaryState
   }
 
 type DecompressDictionary = Map Word16 (Word16, Word16)
@@ -138,13 +138,14 @@ data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
     nextCode :: Word16
   }
+    deriving (Show)
 
-decompInitial = DecompressState (DecompressDictionaryState Map.empty 256) BS.empty
+decompInitial = DecompressState (DecompressDictionaryState Map.empty 256)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress codeLength compressed =
   let input = LeftOpenByteString compressed 0 codeLength
-   in evalStateT (decompressHelper Nothing input) decompInitial
+   in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
     unpackEntry :: DecompressDictionary -> Word16 -> Either String ByteString
@@ -161,13 +162,14 @@ decompress codeLength compressed =
           unpackEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
 
     decompressHelper ::
-      Maybe Word16 ->
       LeftOpenByteString ->
       StateT
         DecompressState
         (Either String)
         ByteString
-    decompressHelper buffer input =
+    decompressHelper Empty = trace "boofo1" return BS.empty
+    decompressHelper (Final lobs) = trace "boofo2" return BS.empty
+    decompressHelper (w :< Empty) =
       do
         DecompressState
           { dictState =
@@ -177,21 +179,47 @@ decompress codeLength compressed =
                 },
             ..
           } <-
-          get
-        let (maybeCurrent, rest) = takeWord input
-        currentWord <- lift $ maybeToEither
-            ( "Could not obtain word of length "
-                <> show codeLength
-                <> " from "
-                <> show compressed
-            )
-            maybeCurrent
-        output <-
-          if currentWord < 256
-            then pure $ BS.singleton $ fromIntegral currentWord
-            else lift $ unpackEntry decompDict currentWord
+           get
+        lift $ trace (show decompDict) unpackEntry decompDict w
+    decompressHelper (w :< (Final lobs)) =
+      do
+        DecompressState
+          { dictState =
+              DecompressDictionaryState
+                { dictionary = decompDict,
+                  nextCode = nextcode
+                },
+            ..
+          } <-
+          trace "boofo4" get
+        lift $ unpackEntry decompDict w
+    decompressHelper (w1 :< (w2 :< lobs)) =
+      do
+        DecompressState
+          { dictState =
+              dictSt@DecompressDictionaryState
+                { dictionary = decompDict,
+                  nextCode = nextcode
+                },
+            ..
+          } <-
+          trace "boofo5" get
+        let newState = update dictSt (w1, w2)
+        put DecompressState {dictState = newState}
+        compressedRest <- trace (show newState) decompressHelper lobs
+        lift $ 
+            (<>) <$> 
+                unpackEntry decompDict w1 <*> 
+                (unpackEntry decompDict w2 <&> (<> compressedRest))
 
-        undefined
+    update :: DecompressDictionaryState -> (Word16, Word16) -> DecompressDictionaryState
+    update dictState@(DecompressDictionaryState map nextCode) pair =
+      if nextCode <= 2 ^ codeLength - 1
+        then
+          DecompressDictionaryState
+            (insert nextCode pair map)
+            (nextCode + 1)
+        else dictState
 
 --         maybeToEither $
 --             case Map.lookup currentWord (decompressDictionary $ dictState decompressState) of
