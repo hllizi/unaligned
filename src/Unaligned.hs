@@ -16,6 +16,7 @@
 module Unaligned where
 
 import Data.Bits
+import Data.BitString
 import Data.ByteString.Lazy as BS
 import Data.Proxy
 import Data.TypeNums
@@ -177,7 +178,7 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
   | wordLength < 1 = (Nothing, input)
   | otherwise =
     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
-        numberOfNeededBytes = ceiling (fromIntegral numberOfBitsNotFromFirstByte / 8) + 1
+        numberOfNeededBytes = ceiling $ fromIntegral wordLength / 8
         (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
      in maybe
           (Nothing, input)
@@ -190,7 +191,7 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
                         (BS.tail current)
                         adjustedFirstByte
                     (usedBits, stringRest) =
-                      if n == 0 then (n, rest) else (8, byte `cons` rest)
+                      if n == 0 then (n, rest) else (n, byte `cons` rest)
                  in (Just word, LeftOpenByteString stringRest usedBits wordLength)
               )
           )
@@ -220,7 +221,7 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
         let remainingBits = (8 - bitsToFitIn)
             remainder = makeMask remainingBits .&. fromIntegral (BS.head bs)
          in ( targetWord
-                `xor` shift
+                `xor` shiftR
                   (fromIntegral $ BS.head bs)
                   remainingBits,
               LeftOpen remainder remainingBits
