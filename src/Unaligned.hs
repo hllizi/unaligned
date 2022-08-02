@@ -191,7 +191,7 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
                         (BS.tail current)
                         adjustedFirstByte
                     (usedBits, stringRest) =
-                      if n == 0 then (n, rest) else (n, byte `cons` rest)
+                      if n == 0 then (8, rest) else (n, byte `cons` rest)
                  in (Just word, LeftOpenByteString stringRest usedBits wordLength)
               )
           )
@@ -227,9 +227,10 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
               LeftOpen remainder remainingBits
             )
 
-pattern w :< rest <- (takeWord -> (Just w, rest))
+takeWordWrapper = (\taken -> trace ("taken word: " <> show taken) taken) . takeWord
+pattern w :< rest <- (takeWordWrapper -> (Just w, rest))
 
-pattern Final bs <- (takeWord -> (Nothing, bs))
+pattern Final bs <- (takeWordWrapper -> (Nothing, bs))
 
 leftAlign :: LeftOpenByteString -> ByteString
 leftAlign (LeftOpenByteString bs n _)

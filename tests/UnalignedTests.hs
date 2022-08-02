@@ -136,7 +136,7 @@ main = hspec $ do
           unalignedBs4 = LeftOpenByteString (0 `cons` 128 `cons` 192 `cons` 0 `cons` empty) 8 9
        in do
             --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 0 9)
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 8 9)
             takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs3) `shouldBe` (Nothing, unalignedBs3)
             takeWord unalignedBs4 `shouldBe` (Just 1, LeftOpenByteString (0 `cons` 192 `cons` 0 `cons` BS.empty) 7 9)
             let lobs = LeftOpenByteString (0 `cons` 128 `cons` 96 `cons` 0 `cons` empty) 8 9

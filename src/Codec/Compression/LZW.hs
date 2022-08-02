@@ -168,7 +168,7 @@ decompress codeLength compressed =
         DecompressState
         (Either String)
         ByteString
-    decompressHelper (Final lobs) = return BS.empty
+    decompressHelper (Final lobs) = return $ trace "Knood 2" BS.empty
     decompressHelper (w :< (Final lobs)) =
       do
         DecompressState
@@ -180,7 +180,7 @@ decompress codeLength compressed =
             ..
           } <-
           get
-        lift $ unpackEntry decompDict w
+        lift $ unpackEntry decompDict $ trace "Knood" w
     decompressHelper (w1 :< (w2 :< lobs)) =
       do
         DecompressState
@@ -194,7 +194,7 @@ decompress codeLength compressed =
           get
         let newState = update dictSt (w1, w2)
         put DecompressState {dictState = newState}
-        compressedRest <- decompressHelper lobs
+        compressedRest <- decompressHelper $ trace "Knood 1" lobs
         lift $
           (<>)
             <$> unpackEntry decompDict w1
