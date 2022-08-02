@@ -15,6 +15,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Unaligned
+import Data.Word
 
 main :: IO ()
 main = hspec $ do
@@ -24,12 +25,15 @@ main = hspec $ do
         expected = 0 `BS.cons` 128 `BS.cons` 96 `BS.cons` 0 `BS.cons` BS.empty
      in compressed `shouldBe` expected
 
+  it "decompress inverts compress" $ 
+     property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . fromRight "" $ decompress 9 $ compress 9 $ BS.pack bytes)
+
   it "Test decompress" $ do
     let testText = "Hallo, Spencer!"
         compressed = compress 9 testText
-        decompressed = (decompress 9) $ trace ("Boou: " <> (show $ bitString $ BS.toStrict compressed)) compressed 
+        decompressed = decompress 9 compressed 
      in do
-          (fromRight "Default" decompressed)
+          fromRight "Default" decompressed
             `shouldBe` testText
           forM_
             [testText]
@@ -46,4 +50,3 @@ main = hspec $ do
     fromRight "Default" (decompress 9 (BS.pack [0, 128, 96, 0]))
       `shouldBe` BS.pack [1, 1, 1, 1]
 
-showBytewise = intercalate ", " . map show . BS.unpack

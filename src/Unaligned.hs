@@ -109,8 +109,8 @@ combineTwoBytes leftByte rightByte =
 -- | Place as many of the highest-valued used bits of the second argument in the unused bits of the first and shift the remaining used bits of the second argument to its left edge. Return the results of these operation as a pair of a ByteString of complete byte and and uncomplecte RightOpen byte.
 mergeWord :: RightOpen Word8 -> LeftOpen Word16 -> (ByteString, RightOpen Word8)
 mergeWord target@(RightOpen byte usedLeft) source@(LeftOpen word usedRight) =
-  let unusedLeft = 8 - trace (show target) usedLeft -- number of bits unused at the end of the last byte
-      unusedRight = 16 - trace (show source) usedRight -- number of bits unused at the beginning of the word to be pushed
+  let unusedLeft = 8 - usedLeft -- number of bits unused at the end of the last byte
+      unusedRight = 16 - usedRight -- number of bits unused at the beginning of the word to be pushed
       shiftValue = unusedRight - usedLeft -- how much (and in which direction) we need to shift to align the used bits of left and right.
       wordAdjusted =
           shift word (fromIntegral shiftValue)
@@ -126,11 +126,11 @@ mergeWord target@(RightOpen byte usedLeft) source@(LeftOpen word usedRight) =
           if usedRight + usedLeft < 16 
             then
               ( singleton filledUpByte,
-                RightOpen (leftByte shiftedRestOfWord) $ trace ("Used: " <> show resultUsed) resultUsed
+                RightOpen (leftByte shiftedRestOfWord) resultUsed
               )
             else
               ( filledUpByte `cons` singleton (leftByte shiftedRestOfWord),
-                RightOpen (rightByte shiftedRestOfWord) $ trace ("Used: " <> show resultUsed) resultUsed
+                RightOpen (rightByte shiftedRestOfWord) resultUsed
               )
 
 -- | Push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
@@ -175,13 +175,13 @@ maybeHead byteString =
 -- | Take a Word16 from an unaligned Bytestring. Expects wordLegnth to be <= 16.
 takeWord :: LeftOpenByteString -> (Maybe Word16, LeftOpenByteString)
 takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLength)
-  | wordLength < 1 = trace ("Boudzko: " <> (show $ BitS.bitString $ toStrict sourceByteString)) (Nothing, input)
+  | wordLength < 1 =  (Nothing, input)
   | otherwise =
     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
         numberOfNeededBytes = ceiling $ fromIntegral wordLength / 8
         (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
      in maybe
-          (trace ("Ourpel: " <> (show $ BitS.bitString $ toStrict sourceByteString)) (Nothing, input))
+          (Nothing, input)
           ( \current ->
               ( let firstByte = fromIntegral (BS.head current) :: Word16
                     adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
@@ -227,10 +227,9 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
               LeftOpen remainder remainingBits
             )
 
-takeWordWrapper = (\taken -> trace ("taken word: " <> show taken) taken) . takeWord
-pattern w :< rest <- (takeWordWrapper -> (Just w, rest))
+pattern w :< rest <- (takeWord -> (Just w, rest))
 
-pattern Final bs <- (takeWordWrapper -> (Nothing, bs))
+pattern Final bs <- (takeWord -> (Nothing, bs))
 
 leftAlign :: LeftOpenByteString -> ByteString
 leftAlign (LeftOpenByteString bs n _)

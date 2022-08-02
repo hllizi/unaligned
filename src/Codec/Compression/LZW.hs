@@ -104,7 +104,7 @@ compress codeLength bs =
                                       updatedDictionary
                                       newUnfinished
                            in do
-                                put (trace (show newUnfinished) newState)
+                                put newState
                                 compressedRest <-
                                   compressWithMap
                                     Nothing
@@ -113,7 +113,7 @@ compress codeLength bs =
               )
               buffer
     mergeBuffer buffer unfinished =
-      let (intermediateAcc, intermediateUnfinished) = trace ("Merging " <> show buffer <> show unfinished) mergeHelper (fst buffer) unfinished
+      let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) unfinished
        in (intermediateAcc `append`)
             `first` mergeHelper (snd buffer) intermediateUnfinished
 
@@ -125,7 +125,7 @@ compress codeLength bs =
         then
           let newDictionary = insert buffer nextCode map
            in CompressDictionaryState
-                (trace ("Comp dict: " <> show newDictionary) newDictionary)
+                newDictionary
                 (nextCode + 1)
         else dictState
 
@@ -168,7 +168,7 @@ decompress codeLength compressed =
         DecompressState
         (Either String)
         ByteString
-    decompressHelper (Final lobs) = return $ trace "Knood 2" BS.empty
+    decompressHelper (Final lobs) = return BS.empty
     decompressHelper (w :< (Final lobs)) =
       do
         DecompressState
@@ -180,7 +180,7 @@ decompress codeLength compressed =
             ..
           } <-
           get
-        lift $ unpackEntry decompDict $ trace "Knood" w
+        lift $ unpackEntry decompDict w
     decompressHelper (w1 :< (w2 :< lobs)) =
       do
         DecompressState
@@ -194,7 +194,7 @@ decompress codeLength compressed =
           get
         let newState = update dictSt (w1, w2)
         put DecompressState {dictState = newState}
-        compressedRest <- decompressHelper $ trace "Knood 1" lobs
+        compressedRest <- decompressHelper lobs
         lift $
           (<>)
             <$> unpackEntry decompDict w1
@@ -206,7 +206,7 @@ decompress codeLength compressed =
         then
           let newDictionary = insert nextCode pair map
            in DecompressDictionaryState
-                (trace ("Decomp dict: " <> show newDictionary) newDictionary)
+                newDictionary
                 (nextCode + 1)
         else dictState
 
