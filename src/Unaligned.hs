@@ -16,12 +16,13 @@
 module Unaligned where
 
 import Data.Bits
-import Data.BitString
+import qualified Data.BitString as BitS
 import Data.ByteString.Lazy as BS
 import Data.Proxy
 import Data.TypeNums
 import Data.Word
 import GHC.Exts
+import Debug.Trace
 
 type Bitcount = Word
 
@@ -107,30 +108,29 @@ combineTwoBytes leftByte rightByte =
 
 -- | Place as many of the highest-valued used bits of the second argument in the unused bits of the first and shift the remaining used bits of the second argument to its left edge. Return the results of these operation as a pair of a ByteString of complete byte and and uncomplecte RightOpen byte.
 mergeWord :: RightOpen Word8 -> LeftOpen Word16 -> (ByteString, RightOpen Word8)
-mergeWord (RightOpen byte usedLeft) (LeftOpen word usedRight) =
-  let unusedLeft = 8 - usedLeft -- number of bits unused at the end of the last byte
-      unusedRight = 16 - usedRight -- number of bits unused at the beginning of the word to be pushed
+mergeWord target@(RightOpen byte usedLeft) source@(LeftOpen word usedRight) =
+  let unusedLeft = 8 - trace (show target) usedLeft -- number of bits unused at the end of the last byte
+      unusedRight = 16 - trace (show source) usedRight -- number of bits unused at the beginning of the word to be pushed
       shiftValue = unusedRight - usedLeft -- how much (and in which direction) we need to shift to align the used bits of left and right.
       wordAdjusted =
-        if shiftValue >= 0
-          then shiftL word (fromIntegral shiftValue)
-          else shiftR word (fromIntegral (- shiftValue))
+          shift word (fromIntegral shiftValue)
       filledUpByte = byte `xor` leftByte wordAdjusted
       shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
       byteCompleted = unusedLeft <= usedRight
       resultUnused = mod (unusedLeft + unusedRight) 8
-      resultUsed = (8 - resultUnused)
+      resultUsed = let used = (8 - resultUnused)
+                    in if used == 8 then 0 else used
    in if not byteCompleted
         then (empty, RightOpen filledUpByte resultUsed)
         else
-          if usedRight - resultUnused < 8
+          if usedRight + usedLeft < 16 
             then
               ( singleton filledUpByte,
-                RightOpen (leftByte shiftedRestOfWord) resultUsed
+                RightOpen (leftByte shiftedRestOfWord) $ trace ("Used: " <> show resultUsed) resultUsed
               )
             else
               ( filledUpByte `cons` singleton (leftByte shiftedRestOfWord),
-                RightOpen (rightByte shiftedRestOfWord) resultUsed
+                RightOpen (rightByte shiftedRestOfWord) $ trace ("Used: " <> show resultUsed) resultUsed
               )
 
 -- | Push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
@@ -175,13 +175,13 @@ maybeHead byteString =
 -- | Take a Word16 from an unaligned Bytestring. Expects wordLegnth to be <= 16.
 takeWord :: LeftOpenByteString -> (Maybe Word16, LeftOpenByteString)
 takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLength)
-  | wordLength < 1 = (Nothing, input)
+  | wordLength < 1 = trace ("Boudzko: " <> (show $ BitS.bitString $ toStrict sourceByteString)) (Nothing, input)
   | otherwise =
     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
         numberOfNeededBytes = ceiling $ fromIntegral wordLength / 8
         (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
      in maybe
-          (Nothing, input)
+          (trace ("Ourpel: " <> (show $ BitS.bitString $ toStrict sourceByteString)) (Nothing, input))
           ( \current ->
               ( let firstByte = fromIntegral (BS.head current) :: Word16
                     adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
@@ -230,8 +230,6 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
 pattern w :< rest <- (takeWord -> (Just w, rest))
 
 pattern Final bs <- (takeWord -> (Nothing, bs))
-
-pattern Empty <- (takeWord -> (Nothing, LeftOpenByteString _ 0 _))
 
 leftAlign :: LeftOpenByteString -> ByteString
 leftAlign (LeftOpenByteString bs n _)

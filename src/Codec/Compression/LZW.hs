@@ -104,7 +104,7 @@ compress codeLength bs =
                                       updatedDictionary
                                       newUnfinished
                            in do
-                                put newState
+                                put (trace (show newUnfinished) newState)
                                 compressedRest <-
                                   compressWithMap
                                     Nothing
@@ -113,7 +113,7 @@ compress codeLength bs =
               )
               buffer
     mergeBuffer buffer unfinished =
-      let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) unfinished
+      let (intermediateAcc, intermediateUnfinished) = trace ("Merging " <> show buffer <> show unfinished) mergeHelper (fst buffer) unfinished
        in (intermediateAcc `append`)
             `first` mergeHelper (snd buffer) intermediateUnfinished
 
@@ -123,9 +123,10 @@ compress codeLength bs =
     update dictState@(CompressDictionaryState map nextCode) buffer =
       if nextCode <= 2 ^ codeLength - 1
         then
-          CompressDictionaryState
-            (insert buffer nextCode map)
-            (nextCode + 1)
+          let newDictionary = insert buffer nextCode map
+           in CompressDictionaryState
+                (trace ("Comp dict: " <> show newDictionary) newDictionary)
+                (nextCode + 1)
         else dictState
 
 data DecompressState = DecompressState
@@ -138,13 +139,13 @@ data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
     nextCode :: Word16
   }
-    deriving (Show)
+  deriving (Show)
 
 decompInitial = DecompressState (DecompressDictionaryState Map.empty 256)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress codeLength compressed =
-  let input = LeftOpenByteString compressed 0 codeLength
+  let input = LeftOpenByteString compressed 8 codeLength
    in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
@@ -167,20 +168,7 @@ decompress codeLength compressed =
         DecompressState
         (Either String)
         ByteString
-    decompressHelper Empty = trace "boofo1" return BS.empty
-    decompressHelper (Final lobs) = trace "boofo2" return BS.empty
-    decompressHelper (w :< Empty) =
-      do
-        DecompressState
-          { dictState =
-              DecompressDictionaryState
-                { dictionary = decompDict,
-                  nextCode = nextcode
-                },
-            ..
-          } <-
-           get
-        lift $ trace (show decompDict) unpackEntry decompDict w
+    decompressHelper (Final lobs) = return BS.empty
     decompressHelper (w :< (Final lobs)) =
       do
         DecompressState
@@ -191,7 +179,7 @@ decompress codeLength compressed =
                 },
             ..
           } <-
-          trace "boofo4" get
+          get
         lift $ unpackEntry decompDict w
     decompressHelper (w1 :< (w2 :< lobs)) =
       do
@@ -203,22 +191,23 @@ decompress codeLength compressed =
                 },
             ..
           } <-
-          trace "boofo5" get
+          get
         let newState = update dictSt (w1, w2)
         put DecompressState {dictState = newState}
-        compressedRest <- trace (show newState) decompressHelper lobs
-        lift $ 
-            (<>) <$> 
-                unpackEntry decompDict w1 <*> 
-                (unpackEntry decompDict w2 <&> (<> compressedRest))
+        compressedRest <- decompressHelper lobs
+        lift $
+          (<>)
+            <$> unpackEntry decompDict w1
+            <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
 
     update :: DecompressDictionaryState -> (Word16, Word16) -> DecompressDictionaryState
     update dictState@(DecompressDictionaryState map nextCode) pair =
       if nextCode <= 2 ^ codeLength - 1
         then
-          DecompressDictionaryState
-            (insert nextCode pair map)
-            (nextCode + 1)
+          let newDictionary = insert nextCode pair map
+           in DecompressDictionaryState
+                (trace ("Decomp dict: " <> show newDictionary) newDictionary)
+                (nextCode + 1)
         else dictState
 
 --         maybeToEither $
