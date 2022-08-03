@@ -65,6 +65,13 @@ main = hspec $ do
             BS.last bs `shouldBe` 255
             unfinished `shouldBe` RightOpen 240 4
 
+      let target = RightOpen 132 6
+          source = LeftOpen 257 9
+          firstMerge = mergeWord target source
+          secondMerge = mergeWord (snd firstMerge) source 
+       in do
+          firstMerge `shouldBe` (singleton 134, RightOpen 2 7)
+          secondMerge `shouldBe` (3 `cons` 1 `cons` empty, RightOpen 0 0)
     it "Test the results of pushing an unaligned word onto a ByteString" $ do
       let (bs :> unfinished) =
             pushWord
@@ -102,26 +109,45 @@ main = hspec $ do
           second = LeftOpen 256 9
           result = pushWord (pushWord (pushWord base first) first) second
           expected = (0 `cons` 128 `cons` 96 `cons` BS.empty) :> RightOpen 0 3
-       in trace (  "result  : " 
-                ++ show (BitSt.bitString 
-                            (toStrict $ toByteString result))) 
-                            result
-            `shouldBe` trace 
-                (  "expected: " 
-                ++ show (BitSt.bitString 
-                            (toStrict $ toByteString expected))) 
-                            expected
+       in trace
+            ( "result  : "
+                ++ show
+                  ( BitSt.bitString
+                      (toStrict $ toByteString result)
+                  )
+            )
+            result
+            `shouldBe` trace
+              ( "expected: "
+                  ++ show
+                    ( BitSt.bitString
+                        (toStrict $ toByteString expected)
+                    )
+              )
+              expected
     it "make mask for half of a byte, zeroes left" $ do
       makeMask 4 `shouldBe` 15
       makeMask 4 `shouldBe` 15
 
     it "test takeWord" $ do
-      let unalignedBs1@(LeftOpenByteString bs1 n1) = (LeftOpenByteString (1 `BS.cons` 127 `BS.cons` empty) 1)
-          unalignedBs2@(LeftOpenByteString bs2 n2) = (LeftOpenByteString (1 `BS.cons` 255 `BS.cons` empty) 1)
+      let unalignedBs1@(LeftOpenByteString bs1 n1 _) = (LeftOpenByteString (1 `BS.cons` 127 `BS.cons` empty) 1 9)
+          unalignedBs2@(LeftOpenByteString bs2 n2 _) = (LeftOpenByteString (1 `BS.cons` 255 `BS.cons` empty) 1 9)
+          unalignedBs3 = unalignedBs2 {lobsLengthOfNextWord = 0}
+          unalignedBs4 = LeftOpenByteString (0 `cons` 128 `cons` 192 `cons` 0 `cons` empty) 8 9
        in do
-       --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 9 `shouldBe` Just (256 + 128 + 127, LeftOpenByteString BS.empty 0) 
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) 0 `shouldBe` Nothing
+            --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 8 9)
+            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs3) `shouldBe` (Nothing, unalignedBs3)
+            takeWord unalignedBs4 `shouldBe` (Just 1, LeftOpenByteString (0 `cons` 192 `cons` 0 `cons` BS.empty) 7 9)
+            let lobs = LeftOpenByteString (0 `cons` 128 `cons` 96 `cons` 0 `cons` empty) 8 9
+                w1 :< (w2 :< _) = lobs
+             in do
+                  let takeFirst@(_, LeftOpenByteString bs _ _) = takeWord lobs
+                  takeFirst `shouldBe` (trace ("Knood " <> (show $ BitSt.bitString $ toStrict $ bs)) (Just 1, LeftOpenByteString (0 `cons` 96 `cons` 0 `cons` empty) 7 9))
+                  let takeSecond@(w, LeftOpenByteString _ _ _) = takeWord $ snd takeFirst
+                  takeSecond `shouldBe` (trace ("Knood " <> (show $ BitSt.bitString $ toStrict $ bs)) (Just 1, LeftOpenByteString (32 `cons` 0 `cons` empty) 6 9))
+                  w1 `shouldBe` 1
+                  w2 `shouldBe` 1
 
     it "test minBytes" $ do
       minBytes 7 `shouldBe` 1
@@ -137,3 +163,5 @@ main = hspec $ do
             n `shouldBe` 4
             bs `shouldBe` 2 `cons` empty
 
+    it "test leftAlign" $ do
+      leftAlign (LeftOpenByteString (15 `cons` 240 `cons` BS.empty) 4 0) `shouldBe` 255 `cons` 0 `cons` BS.empty

@@ -4,21 +4,25 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Unaligned where
 
 import Data.Bits
+import qualified Data.BitString as BitS
 import Data.ByteString.Lazy as BS
 import Data.Proxy
 import Data.TypeNums
 import Data.Word
 import GHC.Exts
+import Debug.Trace
 
 type Bitcount = Word
 
@@ -58,8 +62,11 @@ data RightOpenByteString
   = EmptyROBs
   | ByteString :> RightOpen Word8
 
-data LeftOpenByteString
-        = LeftOpenByteString ByteString Int
+data LeftOpenByteString = LeftOpenByteString
+  { lobsContent :: ByteString,
+    lobsUsedBitsInFirstByte :: Int,
+    lobsLengthOfNextWord :: Int
+  }
 
 deriving instance Show RightOpenByteString
 
@@ -101,23 +108,22 @@ combineTwoBytes leftByte rightByte =
 
 -- | Place as many of the highest-valued used bits of the second argument in the unused bits of the first and shift the remaining used bits of the second argument to its left edge. Return the results of these operation as a pair of a ByteString of complete byte and and uncomplecte RightOpen byte.
 mergeWord :: RightOpen Word8 -> LeftOpen Word16 -> (ByteString, RightOpen Word8)
-mergeWord (RightOpen byte usedLeft) (LeftOpen word usedRight) =
+mergeWord target@(RightOpen byte usedLeft) source@(LeftOpen word usedRight) =
   let unusedLeft = 8 - usedLeft -- number of bits unused at the end of the last byte
       unusedRight = 16 - usedRight -- number of bits unused at the beginning of the word to be pushed
       shiftValue = unusedRight - usedLeft -- how much (and in which direction) we need to shift to align the used bits of left and right.
       wordAdjusted =
-        if shiftValue >= 0
-          then shiftL word (fromIntegral shiftValue)
-          else shiftR word (fromIntegral (- shiftValue))
+          shift word (fromIntegral shiftValue)
       filledUpByte = byte `xor` leftByte wordAdjusted
       shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
       byteCompleted = unusedLeft <= usedRight
       resultUnused = mod (unusedLeft + unusedRight) 8
-      resultUsed = (8 - resultUnused)
+      resultUsed = let used = (8 - resultUnused)
+                    in if used == 8 then 0 else used
    in if not byteCompleted
         then (empty, RightOpen filledUpByte resultUsed)
         else
-          if usedRight - resultUnused < 8
+          if usedRight + usedLeft < 16 
             then
               ( singleton filledUpByte,
                 RightOpen (leftByte shiftedRestOfWord) resultUsed
@@ -167,59 +173,75 @@ maybeHead byteString =
     else Just $ BS.head byteString
 
 -- | Take a Word16 from an unaligned Bytestring. Expects wordLegnth to be <= 16.
-takeWord :: LeftOpenByteString -> Int -> Maybe (Word16, LeftOpenByteString)
-takeWord (LeftOpenByteString sourceByteString usedBitsInFirstByte)
-         wordLength
-  | wordLength < 1 = Nothing
+takeWord :: LeftOpenByteString -> (Maybe Word16, LeftOpenByteString)
+takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLength)
+  | wordLength < 1 =  (Nothing, input)
   | otherwise =
     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
-        numberOfNeededBytes = ceiling (fromIntegral numberOfBitsNotFromFirstByte / 8) + 1
-     in do
-          (current, rest) <- chopNBytes numberOfNeededBytes
-          let firstByte = fromIntegral (BS.head current) :: Word16
-          let adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
-          let (word, LeftOpen byte n) = 
-                fitIn 
-                   numberOfBitsNotFromFirstByte 
-                   (BS.tail current)
-                   adjustedFirstByte
-          let (usedBits, stringRest) = if n == 0 then (n,rest) else (8,byte `cons` rest)
-          pure (word, LeftOpenByteString stringRest usedBits)
+        numberOfNeededBytes = ceiling $ fromIntegral wordLength / 8
+        (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
+     in maybe
+          (Nothing, input)
+          ( \current ->
+              ( let firstByte = fromIntegral (BS.head current) :: Word16
+                    adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
+                    (word, LeftOpen byte n) =
+                      fitIn
+                        numberOfBitsNotFromFirstByte
+                        (BS.tail current)
+                        adjustedFirstByte
+                    (usedBits, stringRest) =
+                      if n == 0 then (8, rest) else (n, byte `cons` rest)
+                 in (Just word, LeftOpenByteString stringRest usedBits wordLength)
+              )
+          )
+          maybeCurrent
   where
-    chopNBytes :: Int -> Maybe (ByteString, ByteString)
+    chopNBytes :: Int -> (Maybe ByteString, ByteString)
     chopNBytes n = do
       let nTypeAdjusted = fromIntegral n
       if BS.length sourceByteString >= nTypeAdjusted
         then
-          Just
-            ( BS.take nTypeAdjusted sourceByteString,
-              BS.drop nTypeAdjusted sourceByteString
-            )
-        else Nothing
+          ( Just $ BS.take nTypeAdjusted sourceByteString,
+            BS.drop nTypeAdjusted sourceByteString
+          )
+        else (Nothing, sourceByteString)
 
     fitIn :: Int -> ByteString -> Word16 -> (Word16, LeftOpen Word8)
     fitIn bitsToFitIn bs targetWord
       | bitsToFitIn <= 0 = (targetWord, LeftOpen 0 0)
       | bitsToFitIn > 8 =
-         let remainingBits = (8 - bitsToFitIn) 
-             adjustedFirstByte = shift (fromIntegral $ BS.head bs) remainingBits
-          in
-            fitIn
+        let remainingBits = (8 - bitsToFitIn)
+            adjustedFirstByte = shift (fromIntegral $ BS.head bs) remainingBits
+         in fitIn
               remainingBits
               (BS.tail bs)
               $ targetWord `xor` adjustedFirstByte
       | otherwise =
-         let remainingBits = (8 - bitsToFitIn) 
-             remainder = makeMask remainingBits .&. fromIntegral (BS.head bs)
-         in
-          (
-                    targetWord 
-            `xor`   shift 
-                        (fromIntegral $ BS.head bs) 
-                        remainingBits
-                        ,
-                    LeftOpen remainder remainingBits
-                    )
+        let remainingBits = (8 - bitsToFitIn)
+            remainder = makeMask remainingBits .&. fromIntegral (BS.head bs)
+         in ( targetWord
+                `xor` shiftR
+                  (fromIntegral $ BS.head bs)
+                  remainingBits,
+              LeftOpen remainder remainingBits
+            )
+
+pattern w :< rest <- (takeWord -> (Just w, rest))
+
+pattern Final bs <- (takeWord -> (Nothing, bs))
+
+leftAlign :: LeftOpenByteString -> ByteString
+leftAlign (LeftOpenByteString bs n _)
+  | BS.null bs = BS.empty
+  | BS.null . BS.tail $ bs = singleton $ shift (BS.head bs) (8 - n)
+  | otherwise =
+    let unusedBits = (8 - n)
+        headAligned = shift (BS.head bs) unusedBits
+        remainderElement = shiftR (BS.head . BS.tail $ bs) n
+        newHead = headAligned `xor` remainderElement
+        adjustedRest = leftAlign $ LeftOpenByteString (BS.tail bs) n 0
+     in newHead `cons` adjustedRest
 
 -- Helpers
 

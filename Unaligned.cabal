@@ -88,4 +88,4 @@ Test-suite lzw-tests
     QuickCheck, 
     bytestring, 
     Unaligned, 
-    bitstring
+    bitstring,

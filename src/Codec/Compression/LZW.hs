@@ -17,6 +17,7 @@ import Data.Functor
 import Data.Map as Map
 import Data.Proxy
 import Data.Word
+import Debug.Trace
 import Unaligned
 
 type CodeLength = Int
@@ -122,14 +123,14 @@ compress codeLength bs =
     update dictState@(CompressDictionaryState map nextCode) buffer =
       if nextCode <= 2 ^ codeLength - 1
         then
-          CompressDictionaryState
-            (insert buffer nextCode map)
-            (nextCode + 1)
+          let newDictionary = insert buffer nextCode map
+           in CompressDictionaryState
+                newDictionary
+                (nextCode + 1)
         else dictState
 
 data DecompressState = DecompressState
-  { dictState :: DecompressDictionaryState,
-    acc :: BS.ByteString
+  { dictState :: DecompressDictionaryState
   }
 
 type DecompressDictionary = Map Word16 (Word16, Word16)
@@ -138,17 +139,18 @@ data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
     nextCode :: Word16
   }
+  deriving (Show)
 
-decompInitial = DecompressState (DecompressDictionaryState Map.empty 256) BS.empty
+decompInitial = DecompressState (DecompressDictionaryState Map.empty 256)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress codeLength compressed =
-  let input = LeftOpenByteString compressed 0
-   in evalStateT (decompressHelper Nothing input) decompInitial
+  let input = LeftOpenByteString compressed 8 codeLength
+   in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
-    unfoldEntry :: DecompressDictionary -> Word16 -> Either String ByteString
-    unfoldEntry dict word =
+    unpackEntry :: DecompressDictionary -> Word16 -> Either String ByteString
+    unpackEntry dict word =
       if word < 256
         then return $ BS.singleton $ fromIntegral word
         else do
@@ -158,16 +160,16 @@ decompress codeLength compressed =
                   <> show word
               )
               (Map.lookup word dict)
-          unfoldEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
+          unpackEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
 
     decompressHelper ::
-      Maybe Word16 ->
       LeftOpenByteString ->
       StateT
         DecompressState
         (Either String)
         ByteString
-    decompressHelper buffer input =
+    decompressHelper (Final lobs) = return BS.empty
+    decompressHelper (w :< (Final lobs)) =
       do
         DecompressState
           { dictState =
@@ -178,20 +180,35 @@ decompress codeLength compressed =
             ..
           } <-
           get
-        (currentWord, rest) <- lift $ do
-          maybeToEither
-            ( "Could not obtain word of length "
-                <> show codeLength
-                <> " from "
-                <> show compressed
-            )
-            (takeWord input codeLength)
-        output <-
-          if currentWord < 256
-            then pure $ BS.singleton $ fromIntegral currentWord
-            else lift $ unfoldEntry decompDict currentWord
+        lift $ unpackEntry decompDict w
+    decompressHelper (w1 :< (w2 :< lobs)) =
+      do
+        DecompressState
+          { dictState =
+              dictSt@DecompressDictionaryState
+                { dictionary = decompDict,
+                  nextCode = nextcode
+                },
+            ..
+          } <-
+          get
+        let newState = update dictSt (w1, w2)
+        put DecompressState {dictState = newState}
+        compressedRest <- decompressHelper lobs
+        lift $
+          (<>)
+            <$> unpackEntry decompDict w1
+            <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
 
-        undefined
+    update :: DecompressDictionaryState -> (Word16, Word16) -> DecompressDictionaryState
+    update dictState@(DecompressDictionaryState map nextCode) pair =
+      if nextCode <= 2 ^ codeLength - 1
+        then
+          let newDictionary = insert nextCode pair map
+           in DecompressDictionaryState
+                newDictionary
+                (nextCode + 1)
+        else dictState
 
 --         maybeToEither $
 --             case Map.lookup currentWord (decompressDictionary $ dictState decompressState) of
