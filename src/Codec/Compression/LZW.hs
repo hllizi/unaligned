@@ -15,6 +15,7 @@ import Data.Either
 import Data.Either.Extra
 import Data.Functor
 import Data.Map as Map
+import Data.Maybe
 import Data.Proxy
 import Data.Word
 import Debug.Trace
@@ -82,36 +83,37 @@ compress codeLength bs =
           unfinished <-
           get
         let next = fromIntegral $ BS.head bs :: Word16
-         in maybe
+         in fromMaybe
               ( compressWithMap
                   (Just next)
                   (BS.tail bs)
               )
-              ( \bufferContent ->
-                  let extendedBuffer = (bufferContent, next)
-                   in case Map.lookup extendedBuffer map of
-                        Just code ->
-                          compressWithMap
-                            (Just code)
-                            (BS.tail bs)
-                        Nothing ->
-                          let (compressedSnippet, newUnfinished) =
-                                mergeBuffer extendedBuffer unfinished
-                              newState =
-                                let updatedDictionary =
-                                      update dictState extendedBuffer
-                                 in CompressState
-                                      updatedDictionary
-                                      newUnfinished
-                           in do
-                                put newState
-                                compressedRest <-
-                                  compressWithMap
-                                    Nothing
-                                    (BS.tail bs)
-                                return $ compressedSnippet `append` compressedRest
-              )
-              buffer
+              $ do
+                bufferContent <- buffer
+
+                let extendedBuffer = (bufferContent, next)
+                 in pure $
+                   case Map.lookup extendedBuffer map of
+                     Just code ->
+                      compressWithMap
+                         (Just code)
+                         (BS.tail bs)
+                     Nothing ->
+                       let (compressedSnippet, newUnfinished) =
+                             mergeBuffer extendedBuffer unfinished
+                           newState =
+                             let updatedDictionary =
+                                  update dictState extendedBuffer
+                              in CompressState
+                                   updatedDictionary
+                                   newUnfinished
+                        in do
+                             put newState
+                             compressedRest <-
+                               compressWithMap
+                                 Nothing
+                                 (BS.tail bs)
+                             return $ compressedSnippet `append` compressedRest
     mergeBuffer buffer unfinished =
       let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) unfinished
        in (intermediateAcc `append`)
