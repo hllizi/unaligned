@@ -38,11 +38,12 @@ data CompressState = CompressState
 
 data CompressDictionaryState = CompressDictionaryState
   { dictionary :: Map (Word16, Word16) Word16,
-    nextCode :: Word16
+    nextCode :: Word16,
+    codeLength :: CodeLength
   }
 
 compress :: CodeLength -> ByteString -> ByteString
-compress codeLength bs =
+compress maxCodeLength bs =
   if BS.null bs
     then BS.empty
     else
@@ -52,7 +53,7 @@ compress codeLength bs =
             (BS.tail bs)
         )
         ( CompressState
-            (CompressDictionaryState Map.empty 256)
+            (CompressDictionaryState Map.empty 256 9)
             (RightOpen 0 0)
         )
   where
@@ -62,9 +63,12 @@ compress codeLength bs =
       State CompressState ByteString
     compressWithMap buffer bs
       | BS.null bs = do
-        CompressState _ unfinished <- get
+        CompressState
+          (CompressDictionaryState _ _ codeLength)
+          unfinished <-
+          get
         let (completed, RightOpen byte n) =
-              maybe
+               maybe
                 ("", unfinished)
                 ( \bufferContent ->
                     mergeWord
@@ -79,7 +83,7 @@ compress codeLength bs =
               else BS.singleton byte
       | otherwise = do
         CompressState
-          dictState@(CompressDictionaryState map nextCode)
+          dictState@(CompressDictionaryState map nextCode codeLength)
           unfinished <-
           get
         let next = fromIntegral $ BS.head bs :: Word16
@@ -93,43 +97,48 @@ compress codeLength bs =
 
                 let extendedBuffer = (bufferContent, next)
                  in pure $
-                   case Map.lookup extendedBuffer map of
-                     Just code ->
-                      compressWithMap
-                         (Just code)
-                         (BS.tail bs)
-                     Nothing ->
-                       let (compressedSnippet, newUnfinished) =
-                             mergeBuffer extendedBuffer unfinished
-                           newState =
-                             let updatedDictionary =
-                                  update dictState extendedBuffer
-                              in CompressState
-                                   updatedDictionary
-                                   newUnfinished
-                        in do
-                             put newState
-                             compressedRest <-
-                               compressWithMap
-                                 Nothing
-                                 (BS.tail bs)
-                             return $ compressedSnippet `append` compressedRest
-    mergeBuffer buffer unfinished =
-      let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) unfinished
+                      case Map.lookup extendedBuffer map of
+                        Just code ->
+                          compressWithMap
+                            (Just code)
+                            (BS.tail bs)
+                        Nothing ->
+                          let (compressedSnippet, newUnfinished) =
+                                mergeBuffer extendedBuffer codeLength unfinished
+                              newState =
+                                let updatedDictionary =
+                                      update dictState extendedBuffer
+                                 in CompressState
+                                      updatedDictionary
+                                      newUnfinished
+                           in do
+                                put newState
+                                compressedRest <-
+                                  compressWithMap
+                                    Nothing
+                                    (BS.tail bs)
+                                return $ compressedSnippet `append` compressedRest
+    mergeBuffer buffer codeLength unfinished =
+      let (intermediateAcc, intermediateUnfinished) = mergeHelper (fst buffer) codeLength unfinished
        in (intermediateAcc `append`)
-            `first` mergeHelper (snd buffer) intermediateUnfinished
+            `first` mergeHelper (snd buffer) codeLength intermediateUnfinished
 
-    mergeHelper = \word -> flip mergeWord (LeftOpen word codeLength)
+    mergeHelper = \word codeLength -> flip mergeWord (LeftOpen word codeLength)
+
     update ::
       CompressDictionaryState -> (Word16, Word16) -> CompressDictionaryState
-    update dictState@(CompressDictionaryState map nextCode) buffer =
-      if nextCode <= 2 ^ codeLength - 1
-        then
-          let newDictionary = insert buffer nextCode map
+    update dictState@(CompressDictionaryState map nextCode codeLength) buffer =
+     let (newCode, newCodeLength, newDictionary) =
+            if nextCode >= 2 ^ codeLength 
+                then
+                    if codeLength >= maxCodeLength
+                        then (nextCode, codeLength, map)
+                        else (nextCode + 1, codeLength + 1, insert buffer nextCode map)
+                else (nextCode + 1, codeLength, insert buffer nextCode map)
            in CompressDictionaryState
                 newDictionary
-                (nextCode + 1)
-        else dictState
+                newCode
+                newCodeLength
 
 data DecompressState = DecompressState
   { dictState :: DecompressDictionaryState
@@ -139,15 +148,16 @@ type DecompressDictionary = Map Word16 (Word16, Word16)
 
 data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
-    nextCode :: Word16
+    nextCode :: Word16,
+    codeLength :: CodeLength
   }
   deriving (Show)
 
-decompInitial = DecompressState (DecompressDictionaryState Map.empty 256)
+decompInitial = DecompressState (DecompressDictionaryState Map.empty 256 9)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
-decompress codeLength compressed =
-  let input = LeftOpenByteString compressed 8 codeLength
+decompress maxCodeLength compressed =
+  let input = LeftOpenByteString compressed 8 9
    in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
@@ -177,7 +187,8 @@ decompress codeLength compressed =
           { dictState =
               DecompressDictionaryState
                 { dictionary = decompDict,
-                  nextCode = nextcode
+                  nextCode = nextcode,
+                  codeLength = length
                 },
             ..
           } <-
@@ -189,28 +200,34 @@ decompress codeLength compressed =
           { dictState =
               dictSt@DecompressDictionaryState
                 { dictionary = decompDict,
-                  nextCode = nextcode
+                  nextCode = nextcode,
+                  codeLength = length
                 },
             ..
           } <-
           get
-        let newState = update dictSt (w1, w2)
+        let newState@(DecompressDictionaryState _ _ newWordLength) = update dictSt (w1, w2)
         put DecompressState {dictState = newState}
-        compressedRest <- decompressHelper lobs
+        compressedRest <- decompressHelper (lobs { lobsLengthOfNextWord = newWordLength})
         lift $
           (<>)
             <$> unpackEntry decompDict w1
             <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
 
     update :: DecompressDictionaryState -> (Word16, Word16) -> DecompressDictionaryState
-    update dictState@(DecompressDictionaryState map nextCode) pair =
-      if nextCode <= 2 ^ codeLength - 1
-        then
-          let newDictionary = insert nextCode pair map
+    update dictState@(DecompressDictionaryState map nextCode codeLength) pair =
+     let (newCode, newCodeLength, newDictionary) =
+            if nextCode >= 2 ^ codeLength
+                then
+                    if codeLength >= maxCodeLength
+                        then (nextCode, codeLength, map)
+                        else (nextCode + 1, codeLength + 1, insert nextCode pair map)
+                else (nextCode + 1, codeLength, insert nextCode pair map)
+ 
            in DecompressDictionaryState
                 newDictionary
-                (nextCode + 1)
-        else dictState
+                newCode
+                newCodeLength
 
 --         maybeToEither $
 --             case Map.lookup currentWord (decompressDictionary $ dictState decompressState) of

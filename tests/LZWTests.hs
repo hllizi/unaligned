@@ -10,43 +10,45 @@ import Data.BitString.BigEndian
 import qualified Data.ByteString.Lazy as BS
 import Data.Either
 import Data.List
+import Data.Word
+import Data.Char
 import Debug.Trace
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Unaligned
-import Data.Word
 
 main :: IO ()
-main = hspec $ do
-  it "Test compress" $ do
-    let toCompress = 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` BS.empty
-        compressed = compress 9 toCompress
-        expected = 0 `BS.cons` 128 `BS.cons` 96 `BS.cons` 0 `BS.cons` BS.empty
-     in compressed `shouldBe` expected
+main = do
+  sampletext <- readFile "./tests/sample.txt"
+  hspec $ do
+    it "Test compress" $ do
+      let toCompress = 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` BS.empty
+          compressed = compress 12 toCompress
+          expected = 0 `BS.cons` 128 `BS.cons` 96 `BS.cons` 0 `BS.cons` BS.empty
+       in compressed `shouldBe` expected
 
-  it "decompress inverts compress" $ 
-     property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . fromRight "" $ decompress 9 $ compress 9 $ BS.pack bytes)
+    it "decompress inverts compress" $
+      property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . fromRight "" $ decompress 12 $ compress 12 $ BS.pack bytes)
 
-  it "Test decompress" $ do
-    let testText = "Hallo, Spencer!"
-        compressed = compress 9 testText
-        decompressed = decompress 9 compressed 
-     in do
-          fromRight "Default" decompressed
-            `shouldBe` testText
-          forM_
-            [testText]
-            ( \testText ->
-                return
-                  ( ( fromRight "Default"
-                        . decompress 9
-                        . compress 9
-                        $ testText
+    it "Test decompress" $ do
+      let testText = BS.pack $ map (fromIntegral . ord) sampletext
+          compressed = compress 10 testText
+          decompressed = decompress 10 compressed
+       in do
+            fromRight "Default" decompressed
+              `shouldBe` testText
+            forM_
+              [testText]
+              ( \testText ->
+                  return
+                    ( ( fromRight "Default"
+                          . decompress 12
+                          . compress 12
+                          $ testText
+                      )
+                        `shouldBe` testText
                     )
-                      `shouldBe` testText
-                  )
-            )
-    fromRight "Default" (decompress 9 (BS.pack [0, 128, 96, 0]))
-      `shouldBe` BS.pack [1, 1, 1, 1]
-
+              )
+      fromRight "Default" (decompress 12 (BS.pack [0, 128, 96, 0]))
+        `shouldBe` BS.pack [1, 1, 1, 1]
