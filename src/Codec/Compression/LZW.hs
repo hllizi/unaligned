@@ -33,16 +33,21 @@ initialMap =
     [1 .. 255]
 
 data CompressState = CompressState
-  { dictState :: CompressDictionaryState,
+  { dictState :: DictionaryState,
     unfinishedByte :: RightOpen Word8
   }
 
-data CompressDictionaryState = CompressDictionaryState
-  { dictionary :: Map (Word16, Word16) Word16,
+data DictionaryState = DictionaryState
+  { dictionary :: Dictionary,
     nextCode :: Word16,
     codeLength :: CodeLength,
-    dictionaryFull :: Bool
+    maxCode :: Word16,
+    isFull :: Bool
   }
+
+data Dictionary
+  = CompressDictionary (Map (Word16, Word16) Word16)
+  | DecompressDictionary (Map Word16 (Word16, Word16))
 
 compress :: CodeLength -> ByteString -> ByteString
 compress maxCodeLength bs =
@@ -55,7 +60,7 @@ compress maxCodeLength bs =
             (BS.tail bs)
         )
         ( CompressState
-            (CompressDictionaryState Map.empty 256 9 False)
+            (DictionaryState (CompressDictionary Map.empty) 256 9 1023 False)
             (RightOpen 0 0)
         )
   where
@@ -66,7 +71,7 @@ compress maxCodeLength bs =
     compressWithMap buffer bs
       | BS.null bs = do
         CompressState
-          (CompressDictionaryState _ _ codeLength _)
+          (DictionaryState _ _ codeLength _ _)
           unfinished <-
           get
         let (completed, RightOpen byte n) =
@@ -85,9 +90,14 @@ compress maxCodeLength bs =
               else BS.singleton byte
       | otherwise = do
         CompressState
-          dictState@(CompressDictionaryState map nextCode codeLength full)
+          dictState@(DictionaryState wrappedDictionary nextCode codeLength _ _)
           unfinished <-
           get
+        let dictionary = case wrappedDictionary of
+                            CompressDictionary map -> map
+                            DecompressDictionary _ -> 
+                                error "A decompress dictionary was used in the function compress. This should not even be possible."
+
         let next = fromIntegral $ BS.head bs :: Word16
          in fromMaybe
               ( compressWithMap
@@ -99,7 +109,7 @@ compress maxCodeLength bs =
 
                 let extendedBuffer = (bufferContent, next)
                  in pure $
-                      case Map.lookup extendedBuffer map of
+                      case Map.lookup extendedBuffer dictionary of
                         Just code ->
                           compressWithMap
                             (Just code)
@@ -108,11 +118,11 @@ compress maxCodeLength bs =
                           let (compressedSnippet, newUnfinished) =
                                 mergeBuffer extendedBuffer codeLength unfinished
                               newState =
-                                let updatedDictionary@(CompressDictionaryState _ _ codelen full) =
-                                      update dictState extendedBuffer
+                                let updatedDictionary@(DictionaryState _ _ _ _ _) =
+                                      updateDictionary dictState extendedBuffer maxCodeLength
                                  in CompressState
-                                          updatedDictionary
-                                          newUnfinished
+                                      updatedDictionary
+                                      newUnfinished
                            in do
                                 put newState
                                 compressedRest <-
@@ -127,27 +137,39 @@ compress maxCodeLength bs =
 
     mergeHelper = \word codeLength -> flip mergeWord (LeftOpen word codeLength)
 
-    update ::
-      CompressDictionaryState -> (Word16, Word16) -> CompressDictionaryState
-    update dictState@(CompressDictionaryState map nextCode codeLength isFull) buffer
-     | isFull = dictState
-     | otherwise = 
-      let maxCode = 2 ^ codeLength - 1
-          (newCode, newCodeLength, newDictionary, newIsFull)
-            | fromIntegral nextCode < maxCode =
-                (nextCode + 1, codeLength, insert buffer nextCode map, False)
-            | codeLength < maxCodeLength =
-                (nextCode + 1, codeLength + 1, insert buffer nextCode map, False)
-            | otherwise =
-                (nextCode, codeLength, insert buffer nextCode map, True)
-       in  CompressDictionaryState
-            newDictionary
-            newCode
-            newCodeLength
-            newIsFull
+updateDictionary ::
+  DictionaryState ->
+  (Word16, Word16) ->
+  CodeLength ->
+  DictionaryState
+updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCode isFull) pair maxCodeLength
+  | isFull = dictState
+  | otherwise =
+    let maxCode = 2 ^ codeLength - 1
+        (newCode, newCodeLength, newDictionary, newIsFull)
+          | fromIntegral nextCode < maxCode =
+            (nextCode + 1, codeLength, updatedDictionary, False)
+          | codeLength < maxCodeLength =
+            (nextCode + 1, codeLength + 1, updatedDictionary, False)
+          | otherwise =
+            (nextCode, codeLength, updatedDictionary, True)
+     in DictionaryState
+          newDictionary
+          (traceThisPrefixed (
+            case dictionary of
+                CompressDictionary _ -> "Compress: "
+                DecompressDictionary _-> "Decompress: "
+                ) newCode)
+          newCodeLength
+          maxCode
+          newIsFull
+  where
+    updatedDictionary = case dictionary of
+      CompressDictionary map -> CompressDictionary $ insert pair nextCode map
+      DecompressDictionary map -> DecompressDictionary $ insert nextCode pair map
 
 data DecompressState = DecompressState
-  { dictState :: DecompressDictionaryState
+  { dictState :: DictionaryState
   }
 
 type DecompressDictionary = Map Word16 (Word16, Word16)
@@ -156,11 +178,12 @@ data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
     nextCode :: Word16,
     codeLength :: CodeLength,
+    maxCode :: Word16,
     isFull :: Bool
   }
   deriving (Show)
 
-decompInitial = DecompressState (DecompressDictionaryState Map.empty 256 9 False)
+decompInitial = DecompressState (DictionaryState (DecompressDictionary Map.empty) 256 9 1023 False)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress maxCodeLength compressed =
@@ -168,9 +191,11 @@ decompress maxCodeLength compressed =
    in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
-    unpackEntry :: DecompressDictionary -> Word16 -> Either String ByteString
-    unpackEntry dict word =
-      if word < 256
+    unpackEntry :: Dictionary -> Word16 -> Either String ByteString
+    unpackEntry dictionary word =
+     case dictionary of
+      DecompressDictionary map  ->
+       if word < 256
         then return $ BS.singleton $ fromIntegral word
         else do
           (word, byte) <-
@@ -178,8 +203,10 @@ decompress maxCodeLength compressed =
               ( "Compressed data invalid: no entry for code "
                   <> show word
               )
-              (Map.lookup word dict)
-          unpackEntry dict word <&> (<> (BS.singleton $ fromIntegral byte))
+              (Map.lookup word map)
+          unpackEntry dictionary word <&> (<> (BS.singleton $ fromIntegral byte))
+      CompressDictionary _ ->
+        Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
 
     decompressHelper ::
       LeftOpenByteString ->
@@ -192,7 +219,7 @@ decompress maxCodeLength compressed =
       do
         DecompressState
           { dictState =
-              DecompressDictionaryState
+              DictionaryState
                 { dictionary = decompDict,
                   nextCode = nextcode,
                   codeLength = length
@@ -205,7 +232,7 @@ decompress maxCodeLength compressed =
       do
         DecompressState
           { dictState =
-              dictSt@DecompressDictionaryState
+              dictSt@DictionaryState
                 { dictionary = decompDict,
                   nextCode = nextcode,
                   codeLength = length
@@ -213,31 +240,13 @@ decompress maxCodeLength compressed =
             ..
           } <-
           get
-        let newState@(DecompressDictionaryState _ _ newWordLength isFull) = update dictSt (w1, w2)
+        let newState@(DictionaryState _ _ newWordLength _ isFull) = updateDictionary dictSt (w1, w2) maxCodeLength
         put DecompressState {dictState = newState}
         compressedRest <- decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
         lift $
           (<>)
             <$> unpackEntry decompDict w1
             <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
-
-    update :: DecompressDictionaryState -> (Word16, Word16) -> DecompressDictionaryState
-    update dictState@(DecompressDictionaryState map nextCode codeLength isFull) pair
-     | isFull = dictState
-     | otherwise = 
-         let  maxCode = 2 ^ codeLength - 1 
-              (newCode, newCodeLength, newDictionary, newIsFull)
-                | nextCode < maxCode =
-                    (nextCode + 1, codeLength, insert nextCode pair map, False)
-                | codeLength < maxCodeLength =
-                    (nextCode + 1, codeLength + 1, insert nextCode pair map, False)
-                | otherwise = 
-                    (nextCode, codeLength, map, True)
-          in DecompressDictionaryState
-                 newDictionary
-                 (traceThisPrefixed "new code: " newCode)
-                 newCodeLength
-                 newIsFull
 
 --         maybeToEither $
 --             case Map.lookup currentWord (decompressDictionary $ dictState decompressState) of
