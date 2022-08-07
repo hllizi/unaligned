@@ -19,6 +19,7 @@ import qualified Data.BitString as BitS
 import Data.Bits
 import Data.ByteString.Lazy as BS
 import Data.Proxy
+import Data.Maybe
 import Data.TypeNums
 import Data.Word
 import Debug.Trace
@@ -184,22 +185,19 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
     let numberOfBitsNotFromFirstByte = wordLength - usedBitsInFirstByte
         numberOfNeededBytes = ceiling $ fromIntegral numberOfBitsNotFromFirstByte / 8 + 1
         (maybeCurrent, rest) = chopNBytes numberOfNeededBytes
-     in maybe
-          (Nothing, input)
-          ( \current ->
-              ( let firstByte = fromIntegral (BS.head current) :: Word16
-                    adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
-                    (word, LeftOpen byte n) =
-                      fitIn
+     in fromMaybe (Nothing, input) $ do
+          current <- maybeCurrent
+          ( let firstByte = fromIntegral (BS.head current) :: Word16
+                adjustedFirstByte = shift firstByte numberOfBitsNotFromFirstByte
+                (word, LeftOpen byte n) =
+                     fitIn
                         numberOfBitsNotFromFirstByte
                         (BS.tail current)
                         adjustedFirstByte
-                    (usedBits, stringRest) =
+                (usedBits, stringRest) =
                       if n == 0 then (8, rest) else (n, byte `cons` rest)
-                 in (Just word, LeftOpenByteString stringRest usedBits wordLength)
+                 in pure (Just word, LeftOpenByteString stringRest usedBits wordLength)
               )
-          )
-          maybeCurrent
   where
     chopNBytes :: Int -> (Maybe ByteString, ByteString)
     chopNBytes n = do
