@@ -68,10 +68,26 @@ main = hspec $ do
       let target = RightOpen 132 6
           source = LeftOpen 257 9
           firstMerge = mergeWord target source
-          secondMerge = mergeWord (snd firstMerge) source 
+          secondMerge = mergeWord (snd firstMerge) source
        in do
-          firstMerge `shouldBe` (singleton 134, RightOpen 2 7)
-          secondMerge `shouldBe` (3 `cons` 1 `cons` empty, RightOpen 0 0)
+            firstMerge `shouldBe` (singleton 134, RightOpen 2 7)
+            secondMerge `shouldBe` (3 `cons` 1 `cons` empty, RightOpen 0 0)
+      let (bs, unfinished) =
+            mergeWord
+              (RightOpen 128 1)
+              (LeftOpen 512 10)
+       in do
+            BS.last bs `shouldBe` 192
+            unfinished `shouldBe` RightOpen 0 3
+
+      let (bs, unfinished) =
+            mergeWord
+              (RightOpen 128 1)
+              (LeftOpen 1040 11)
+       in do
+            BS.last bs `shouldBe` 193
+            unfinished `shouldBe` RightOpen 0 4
+
     it "Test the results of pushing an unaligned word onto a ByteString" $ do
       let (bs :> unfinished) =
             pushWord
@@ -136,18 +152,25 @@ main = hspec $ do
           unalignedBs4 = LeftOpenByteString (0 `cons` 128 `cons` 192 `cons` 0 `cons` empty) 8 9
        in do
             --     takeWord ((trace $ "Bo: " ++ show (BitSt.bitString (toStrict bs1))) unalignedBs1) 9 `shouldBe` Just (256 + 127, LeftOpenByteString BS.empty 0)
-            takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs2) `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 8 9)
+            takeWord unalignedBs2 `shouldBe` (Just $ 256 + 128 + 127, LeftOpenByteString BS.empty 8 9)
             takeWord ((trace $ "Hein: " ++ show (BitSt.bitString (toStrict bs2))) unalignedBs3) `shouldBe` (Nothing, unalignedBs3)
             takeWord unalignedBs4 `shouldBe` (Just 1, LeftOpenByteString (0 `cons` 192 `cons` 0 `cons` BS.empty) 7 9)
             let lobs = LeftOpenByteString (0 `cons` 128 `cons` 96 `cons` 0 `cons` empty) 8 9
+                allOnes = LeftOpenByteString (pack [255, 255, 255, 255])
+                halfHalf = LeftOpenByteString (pack [15, 15])
                 w1 :< (w2 :< _) = lobs
              in do
-                  let takeFirst@(_, LeftOpenByteString bs _ _) = takeWord lobs
-                  takeFirst `shouldBe` (trace ("Knood " <> (show $ BitSt.bitString $ toStrict $ bs)) (Just 1, LeftOpenByteString (0 `cons` 96 `cons` 0 `cons` empty) 7 9))
-                  let takeSecond@(w, LeftOpenByteString _ _ _) = takeWord $ snd takeFirst
-                  takeSecond `shouldBe` (trace ("Knood " <> (show $ BitSt.bitString $ toStrict $ bs)) (Just 1, LeftOpenByteString (32 `cons` 0 `cons` empty) 6 9))
+                  let takeFirst@(_, LeftOpenByteString _ _ _) = takeWord lobs
+                  takeFirst `shouldBe` (Just 1, LeftOpenByteString (0 `cons` 96 `cons` 0 `cons` empty) 7 9)
+                  let takeSecond@(_, LeftOpenByteString _ _ _) = takeWord $ snd takeFirst
+                  takeSecond `shouldBe` (Just 1, LeftOpenByteString (32 `cons` 0 `cons` empty) 6 9)
                   w1 `shouldBe` 1
                   w2 `shouldBe` 1
+
+                  fst  (takeWord $ allOnes 8 10) `shouldBe` Just 1023
+                  fst  (takeWord $ allOnes 8 11) `shouldBe` Just 2047
+                  fst  (takeWord $ allOnes 8 12) `shouldBe` Just 4095
+                  fst  (takeWord $ halfHalf 4 8) `shouldBe` Just 240 
 
     it "test minBytes" $ do
       minBytes 7 `shouldBe` 1

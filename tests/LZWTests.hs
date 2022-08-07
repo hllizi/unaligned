@@ -33,8 +33,8 @@ main = do
 
     it "Test decompress" $ do
       let testText = BS.pack $ map (fromIntegral . ord) sampletext
-          compressed = compress 10 testText
-          decompressed = decompress 10 compressed
+          compressed = compress 11 testText
+          decompressed = decompress 11 compressed
        in do
             fromRight "Default" decompressed
               `shouldBe` testText
