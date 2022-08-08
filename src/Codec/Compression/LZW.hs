@@ -155,7 +155,7 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
             (nextCode, codeLength, updatedDictionary, True)
      in DictionaryState
           newDictionary
-          (traceThisPrefixed (
+          (traceShow (
             case dictionary of
                 CompressDictionary _ -> "Compress: "
                 DecompressDictionary _-> "Decompress: "
@@ -168,7 +168,7 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
       CompressDictionary map -> CompressDictionary $ insert pair nextCode map
       DecompressDictionary map -> DecompressDictionary $ insert nextCode pair map
 
-data DecompressState = DecompressState
+newtype DecompressState = DecompressState
   { dictState :: DictionaryState
   }
 
@@ -187,7 +187,7 @@ decompInitial = DecompressState (DictionaryState (DecompressDictionary Map.empty
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress maxCodeLength compressed =
-  let input = LeftOpenByteString compressed 8 9
+  let input = makeLeftOpenByteString compressed 8 9
    in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
@@ -247,6 +247,3 @@ decompress maxCodeLength compressed =
           (<>)
             <$> unpackEntry decompDict w1
             <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
-
-traceThisPrefixed :: (Show a) => String -> a -> a
-traceThisPrefixed p x = trace (p <> (show x)) x

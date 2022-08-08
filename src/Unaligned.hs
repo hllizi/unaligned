@@ -13,7 +13,27 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Unaligned where
+module Unaligned(
+   RightOpen(..),
+   LeftOpen(..),
+   LeftOpenByteString(Final, (:<)),
+   RightOpenByteString(..),
+   lobsContent,
+   lobsLengthOfNextWord,
+   lobsUsedBitsInFirstByte,
+   makeLeftOpen,
+   makeRightOpen,
+   makeLeftOpenByteString,
+   makeRightOpenByteString,
+   mergeWord,
+   takeWord,
+   leftAlign,
+   combineTwoBytes,
+   leftByte,
+   rightByte,
+   makeMask
+)
+where
 
 import qualified Data.BitString as BitS
 import Data.Bits
@@ -71,14 +91,22 @@ data LeftOpenByteString = LeftOpenByteString
     lobsUsedBitsInFirstByte :: Int,
     lobsLengthOfNextWord :: Int
   }
+deriving instance Show LeftOpenByteString
+
+deriving instance Eq LeftOpenByteString
+
+makeLeftOpenByteString :: ByteString 
+                       -> Int
+                       -> Int
+                       -> LeftOpenByteString
+makeLeftOpenByteString content usedInFirstByte lengthOfNextWord 
+     | lengthOfNextWord > 16 = error "Word length cannot exceed 16"
+     | usedInFirstByte == 0 = error "Bytes with no used bits are not allowed"
+     | otherwise = LeftOpenByteString content usedInFirstByte lengthOfNextWord
 
 deriving instance Show RightOpenByteString
 
 deriving instance Eq RightOpenByteString
-
-deriving instance Show LeftOpenByteString
-
-deriving instance Eq LeftOpenByteString
 
 makeRightOpenByteString bs used =
   if BS.null bs
@@ -137,38 +165,6 @@ mergeWord target@(RightOpen byte usedLeft) source@(LeftOpen word usedRight) =
               ( filledUpByte `cons` singleton (leftByte shiftedRestOfWord),
                 RightOpen (rightByte shiftedRestOfWord) resultUsed
               )
-
--- | Push a right-packed unaligned 16-Bit word into an unaligned left-packed Bytestring.
-pushWord ::
-  RightOpenByteString ->
-  LeftOpen Word16 ->
-  RightOpenByteString
-pushWord EmptyROBs (LeftOpen word usedRight) =
-  let unusedRight = (16 - usedRight)
-      wordAdjusted = shiftL word unusedRight
-   in if usedRight <= 8
-        then BS.empty :> RightOpen (leftByte wordAdjusted) usedRight
-        else
-          (singleton . leftByte $ wordAdjusted)
-            :> RightOpen (rightByte wordAdjusted) (mod usedRight 8)
-pushWord (bs :> (RightOpen lastByte usedLeft)) (LeftOpen word usedRight) =
-  let unusedLeft = 8 - usedLeft -- number of bits unused at the end of the last byte
-      unusedRight = 16 - usedRight -- number of bits unused at the beginning of the word to be pushed
-      shiftValue = unusedRight - usedLeft -- how much (and in which direction) we need to shift to align the used bits of left and right.
-      wordAdjusted =
-        if shiftValue >= 0
-          then shiftL word (fromIntegral shiftValue)
-          else shiftR word (fromIntegral (- shiftValue))
-      filledUpLastByte = lastByte `xor` leftByte wordAdjusted
-      shiftedRestOfWord = shiftL word (fromIntegral (unusedLeft + unusedRight))
-      resultUnused = mod (unusedLeft + unusedRight) 8
-   in if usedRight - resultUnused < 8
-        then
-          (bs `snoc` filledUpLastByte)
-            :> RightOpen (leftByte shiftedRestOfWord) (8 - resultUnused)
-        else
-          (bs `snoc` filledUpLastByte `snoc` leftByte shiftedRestOfWord)
-            :> RightOpen (rightByte shiftedRestOfWord) (8 - resultUnused)
 
 -- | maybeHead for ByteStrings
 maybeHead :: ByteString -> Maybe Word8
@@ -233,6 +229,7 @@ pattern w :< rest <- (takeWord -> (Just w, rest))
 
 pattern Final bs <- (takeWord -> (Nothing, bs))
 
+-- | Shift the used bits in a left open ByteString to the left edge.
 leftAlign :: LeftOpenByteString -> ByteString
 leftAlign (LeftOpenByteString bs n _)
   | BS.null bs = BS.empty
@@ -245,11 +242,5 @@ leftAlign (LeftOpenByteString bs n _)
         adjustedRest = leftAlign $ LeftOpenByteString (BS.tail bs) n 0
      in newHead `cons` adjustedRest
 
--- Helpers
 
--- | Determine the number of Bytes needed to contain a number of bits.
-minBytes :: Int -> Int
-minBytes numberOfBits =
-  numberOfBits `div` 8 + fragmentCorrection
-  where
-    fragmentCorrection = if numberOfBits `mod` 8 == 0 then 0 else 1
+
