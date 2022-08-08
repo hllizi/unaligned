@@ -247,3 +247,6 @@ decompress maxCodeLength compressed =
           (<>)
             <$> unpackEntry decompDict w1
             <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
+
+traceThisPrefixed :: (Show a) => String -> a -> a
+traceThisPrefixed p x = trace (p <> (show x)) x
