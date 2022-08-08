@@ -10,7 +10,7 @@ mkDerivation {
   libraryHaskellDepends = [
     base bitstring bytestring containers extra mtl typenums
   ];
-  executableHaskellDepends = [ base ];
+  executableHaskellDepends = [ base bytestring ];
   testHaskellDepends = [
     base bitstring bytestring hspec HUnit QuickCheck
   ];
