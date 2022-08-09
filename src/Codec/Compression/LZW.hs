@@ -20,6 +20,7 @@ import Data.Maybe
 import Data.Proxy
 import Data.Word
 import Debug.Trace
+import Memoization
 import Unaligned
 
 type CodeLength = Int
@@ -94,9 +95,9 @@ compress maxCodeLength bs =
           unfinished <-
           get
         let dictionary = case wrappedDictionary of
-                            CompressDictionary map -> map
-                            DecompressDictionary _ -> 
-                                error "A decompress dictionary was used in the function compress. This should not even be possible."
+              CompressDictionary map -> map
+              DecompressDictionary _ ->
+                error "A decompress dictionary was used in the function compress. This should not even be possible."
 
         let next = fromIntegral $ BS.head bs :: Word16
          in fromMaybe
@@ -155,11 +156,13 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
             (nextCode, codeLength, updatedDictionary, True)
      in DictionaryState
           newDictionary
-          (traceShow (
-            case dictionary of
-                CompressDictionary _ -> "Compress: "
-                DecompressDictionary _-> "Decompress: "
-                ) newCode)
+          ( traceShow
+              ( case dictionary of
+                  CompressDictionary _ -> "Compress: "
+                  DecompressDictionary _ -> "Decompress: "
+              )
+              newCode
+          )
           newCodeLength
           maxCode
           newIsFull
@@ -191,23 +194,6 @@ decompress maxCodeLength compressed =
    in evalStateT (decompressHelper input) decompInitial
   where
     mapElem x = Prelude.elem x . elems
-    unpackEntry :: Dictionary -> Word16 -> Either String ByteString
-    unpackEntry dictionary word =
-     case dictionary of
-      DecompressDictionary map  ->
-       if word < 256
-        then return $ BS.singleton $ fromIntegral word
-        else do
-          (word, byte) <-
-            maybeToEither
-              ( "Compressed data invalid: no entry for code "
-                  <> show word
-              )
-              (Map.lookup word map)
-          unpackEntry dictionary word <&> (<> (BS.singleton $ fromIntegral byte))
-      CompressDictionary _ ->
-        Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
-
     decompressHelper ::
       LeftOpenByteString ->
       StateT
@@ -246,4 +232,31 @@ decompress maxCodeLength compressed =
         lift $
           (<>)
             <$> unpackEntry decompDict w1
-            <*> (unpackEntry decompDict w2 <&> (<> compressedRest))
+            <*> (Right  (BS.singleton $ rightByte w2) <&> (<> compressedRest))
+
+
+unpackEntry dictionary = 
+        fix (unpackEntryInit dictionary . memoize)
+ where 
+    unpackEntryInit :: Dictionary 
+                    -> (Word16 
+                    -> Either String ByteString) 
+                    -> Word16 
+                    -> Either String ByteString
+    unpackEntryInit dictionary f word =
+      case dictionary of
+        DecompressDictionary map ->
+          if word < 256
+            then return $ BS.singleton $ fromIntegral word
+            else do
+              (word, byte) <-
+                maybeToEither
+                  ( "Compressed data invalid: no entry for code "
+                      <> show word
+                  )
+                  (Map.lookup word map)
+              f  word <&> (<> (BS.singleton $ fromIntegral byte))
+        CompressDictionary _ ->
+          Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
+
+
