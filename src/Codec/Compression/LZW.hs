@@ -5,21 +5,22 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TupleSections #-}
 
 module Codec.Compression.LZW where
 
 import Control.Monad.State
+import qualified Data.Array.IArray as V
 import Data.Bifunctor
 import qualified Data.BitString.BigEndian as BitStr
 import Data.ByteString.Lazy as BS
 import Data.Either
 import Data.Either.Extra
 import Data.Functor
-import Data.Map as Map
+import qualified Data.Map as M
 import Data.Maybe
 import Data.Proxy
 import Data.Word
-import qualified Data.Vector as V
 import Debug.Trace
 import Unaligned
 
@@ -28,9 +29,9 @@ type CodeLength = Int
 initialMap =
   Prelude.foldr
     ( \(number :: Word16) map ->
-        insert [number] number map
+        M.insert [number] number map
     )
-    Map.empty
+    M.empty
     [1 .. 255]
 
 data CompressState = CompressState
@@ -50,8 +51,9 @@ makeDictionaryState dictionary nextCode codeLength =
   DictionaryState dictionary nextCode codeLength (2 ^ codeLength - 1)
 
 data Dictionary
-  = CompressDictionary (Map (Word16, Word16) Word16)
-  | DecompressDictionary (Map Word16 (Word16, Word16))
+  = CompressDictionary (M.Map (Word16, Word16) Word16)
+  | DecompressDictionary (V.Array Word16 (Word16, Word16))
+  deriving (Show)
 
 compress :: CodeLength -> ByteString -> ByteString
 compress maxCodeLength bs =
@@ -64,7 +66,7 @@ compress maxCodeLength bs =
             (BS.tail bs)
         )
         ( CompressState
-            (makeDictionaryState (CompressDictionary Map.empty) 256 9 False)
+            (makeDictionaryState (CompressDictionary M.empty) 256 9 False)
             (RightOpen 0 0)
         )
   where
@@ -113,7 +115,7 @@ compress maxCodeLength bs =
 
                 let extendedBuffer = (bufferContent, next)
                  in pure $
-                      case Map.lookup extendedBuffer dictionary of
+                      case M.lookup extendedBuffer dictionary of
                         Just code ->
                           compressWithMap
                             (Just code)
@@ -158,9 +160,7 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
              in (nextCode + 1, newCodeLength, updatedDictionary, newMaxCode, False)
           | otherwise =
             (nextCode, codeLength, updatedDictionary, maxCode, True)
-     in traceShow
-          "update"
-          DictionaryState
+     in DictionaryState
           newDictionary
           newCode
           newCodeLength
@@ -168,15 +168,15 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
           newIsFull
   where
     updatedDictionary = case dictionary of
-      CompressDictionary map -> CompressDictionary $ insert pair nextCode map
-      DecompressDictionary map -> DecompressDictionary $ updateDict nextCode pair map
+      CompressDictionary map -> CompressDictionary $ M.insert pair nextCode map
+      DecompressDictionary vector ->  DecompressDictionary $
+                                        vector V.// [(fromIntegral nextCode, pair)]
 
-updateDict = insert
 newtype DecompressState = DecompressState
   { dictState :: DictionaryState
   }
 
-type DecompressDictionary = Map Word16 (Word16, Word16)
+type DecompressDictionary = M.Map Word16 (Word16, Word16)
 
 data DecompressDictionaryState = DecompressDictionaryState
   { dictionary :: DecompressDictionary,
@@ -187,14 +187,22 @@ data DecompressDictionaryState = DecompressDictionaryState
   }
   deriving (Show)
 
-decompInitial = DecompressState (makeDictionaryState (DecompressDictionary Map.empty) 256 9 False)
-
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress maxCodeLength compressed =
   let input = makeLeftOpenByteString compressed 8 9
-   in evalStateT (decompressHelper input) decompInitial
+      initialDecompressionState =
+        DecompressState
+          ( makeDictionaryState
+              (DecompressDictionary $ 
+                V.array (256, 2 ^ maxCodeLength -1) 
+                    $ [256 .. (2 ^ maxCodeLength) -1] <&> (, (0, 0)))
+              256
+              9
+              False
+          )
+   in evalStateT (decompressHelper input) initialDecompressionState
   where
-    mapElem x = Prelude.elem x . elems
+    mapElem x = Prelude.elem x . M.elems
     decompressHelper ::
       LeftOpenByteString ->
       StateT
@@ -241,7 +249,7 @@ unpackEntry ::
   Either String ByteString
 unpackEntry dictionary word =
   case dictionary of
-    DecompressDictionary map ->
+    DecompressDictionary vector ->
       if word < 256
         then return $ BS.singleton $ fromIntegral word
         else do
@@ -250,7 +258,12 @@ unpackEntry dictionary word =
               ( "Compressed data invalid: no entry for code "
                   <> show word
               )
-              (Map.lookup word map)
+              (vector !? fromIntegral word)
           unpackEntry dictionary word <&> (<> (BS.singleton $ fromIntegral byte))
     CompressDictionary _ ->
       Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
+   where
+        (!?) :: V.Array Word16 (Word16, Word16) -> Word16 -> Maybe (Word16, Word16)
+        (!?) array index
+          | index `Prelude.elem` V.indices array = Just $ array V.! index
+          | otherwise = Nothing
