@@ -24,7 +24,7 @@ version:            0.1.0.0
 -- copyright:
 -- category:
 extra-source-files: CHANGELOG.md
-
+library-profiling: True
 library
     exposed-modules:  Unaligned, Codec.Compression.LZW
 
@@ -55,7 +55,18 @@ executable Unaligned
     build-depends:
         base ^>=4.14.3.0,
         Unaligned,
+<<<<<<< Updated upstream
 
+=======
+        bytestring,
+        Unaligned
+    ghc-options:
+        -O2
+        -threaded
+        -prof
+        -auto-all
+        "-with-rtsopts=-p"
+>>>>>>> Stashed changes
     hs-source-dirs:   app
     default-language: Haskell2010
 
