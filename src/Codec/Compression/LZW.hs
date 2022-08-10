@@ -19,8 +19,8 @@ import Data.Map as Map
 import Data.Maybe
 import Data.Proxy
 import Data.Word
+import qualified Data.Vector as V
 import Debug.Trace
-import Memoization
 import Unaligned
 
 type CodeLength = Int
@@ -46,6 +46,9 @@ data DictionaryState = DictionaryState
     isFull :: Bool
   }
 
+makeDictionaryState dictionary nextCode codeLength =
+  DictionaryState dictionary nextCode codeLength (2 ^ codeLength - 1)
+
 data Dictionary
   = CompressDictionary (Map (Word16, Word16) Word16)
   | DecompressDictionary (Map Word16 (Word16, Word16))
@@ -61,7 +64,7 @@ compress maxCodeLength bs =
             (BS.tail bs)
         )
         ( CompressState
-            (DictionaryState (CompressDictionary Map.empty) 256 9 1023 False)
+            (makeDictionaryState (CompressDictionary Map.empty) 256 9 False)
             (RightOpen 0 0)
         )
   where
@@ -146,31 +149,29 @@ updateDictionary ::
 updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCode isFull) pair maxCodeLength
   | isFull = dictState
   | otherwise =
-    let maxCode = 2 ^ codeLength - 1
-        (newCode, newCodeLength, newDictionary, newIsFull)
+    let (newCode, newCodeLength, newDictionary, newMaxCode, newIsFull)
           | fromIntegral nextCode < maxCode =
-            (nextCode + 1, codeLength, updatedDictionary, False)
+            (nextCode + 1, codeLength, updatedDictionary, maxCode, False)
           | codeLength < maxCodeLength =
-            (nextCode + 1, codeLength + 1, updatedDictionary, False)
+            let newCodeLength = codeLength + 1
+                newMaxCode = 2 ^ newCodeLength - 1
+             in (nextCode + 1, newCodeLength, updatedDictionary, newMaxCode, False)
           | otherwise =
-            (nextCode, codeLength, updatedDictionary, True)
-     in DictionaryState
+            (nextCode, codeLength, updatedDictionary, maxCode, True)
+     in traceShow
+          "update"
+          DictionaryState
           newDictionary
-          ( traceShow
-              ( case dictionary of
-                  CompressDictionary _ -> "Compress: "
-                  DecompressDictionary _ -> "Decompress: "
-              )
-              newCode
-          )
+          newCode
           newCodeLength
-          maxCode
+          newMaxCode
           newIsFull
   where
     updatedDictionary = case dictionary of
       CompressDictionary map -> CompressDictionary $ insert pair nextCode map
-      DecompressDictionary map -> DecompressDictionary $ insert nextCode pair map
+      DecompressDictionary map -> DecompressDictionary $ updateDict nextCode pair map
 
+updateDict = insert
 newtype DecompressState = DecompressState
   { dictState :: DictionaryState
   }
@@ -186,7 +187,7 @@ data DecompressDictionaryState = DecompressDictionaryState
   }
   deriving (Show)
 
-decompInitial = DecompressState (DictionaryState (DecompressDictionary Map.empty) 256 9 1023 False)
+decompInitial = DecompressState (makeDictionaryState (DecompressDictionary Map.empty) 256 9 False)
 
 decompress :: CodeLength -> ByteString -> Either String ByteString
 decompress maxCodeLength compressed =
@@ -232,31 +233,24 @@ decompress maxCodeLength compressed =
         lift $
           (<>)
             <$> unpackEntry decompDict w1
-            <*> (Right  (BS.singleton $ rightByte w2) <&> (<> compressedRest))
+            <*> (Right (BS.singleton $ rightByte w2) <&> (<> compressedRest))
 
-
-unpackEntry dictionary = 
-        fix (unpackEntryInit dictionary)
- where 
-    unpackEntryInit :: Dictionary 
-                    -> (Word16 
-                    -> Either String ByteString) 
-                    -> Word16 
-                    -> Either String ByteString
-    unpackEntryInit dictionary f word =
-      case dictionary of
-        DecompressDictionary map ->
-          if word < 256
-            then return $ BS.singleton $ fromIntegral word
-            else do
-              (word, byte) <-
-                maybeToEither
-                  ( "Compressed data invalid: no entry for code "
-                      <> show word
-                  )
-                  (Map.lookup word map)
-              f  word <&> (<> (BS.singleton $ fromIntegral byte))
-        CompressDictionary _ ->
-          Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
-
-
+unpackEntry ::
+  Dictionary ->
+  Word16 ->
+  Either String ByteString
+unpackEntry dictionary word =
+  case dictionary of
+    DecompressDictionary map ->
+      if word < 256
+        then return $ BS.singleton $ fromIntegral word
+        else do
+          (word, byte) <-
+            maybeToEither
+              ( "Compressed data invalid: no entry for code "
+                  <> show word
+              )
+              (Map.lookup word map)
+          unpackEntry dictionary word <&> (<> (BS.singleton $ fromIntegral byte))
+    CompressDictionary _ ->
+      Left "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
