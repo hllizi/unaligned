@@ -236,7 +236,7 @@ decompress maxCodeLength compressed =
 
 
 unpackEntry dictionary = 
-        fix (unpackEntryInit dictionary . memoize)
+        fix (unpackEntryInit dictionary)
  where 
     unpackEntryInit :: Dictionary 
                     -> (Word16 
