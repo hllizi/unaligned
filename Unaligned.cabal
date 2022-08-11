@@ -40,7 +40,8 @@ library
                       containers,
                       mtl,
                       extra,
-                      array
+                      array,
+                      hashmap
 
  
     hs-source-dirs:   src

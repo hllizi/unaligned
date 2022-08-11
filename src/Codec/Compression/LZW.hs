@@ -17,7 +17,7 @@ import Data.ByteString.Lazy as BS
 import Data.Either
 import Data.Either.Extra
 import Data.Functor
-import qualified Data.Map as M
+import qualified Data.HashMap as M
 import Data.Maybe
 import Data.Proxy
 import Data.Word
@@ -194,8 +194,10 @@ decompress maxCodeLength compressed =
         DecompressState
           ( makeDictionaryState
               (DecompressDictionary $ 
-                V.array (256, 2 ^ maxCodeLength -1) 
-                    $ [256 .. (2 ^ maxCodeLength) -1] <&> (, (0, 0)))
+               let absoluteMaxCode = 2 ^ maxCodeLength - 1
+                in
+                 V.array (256, absoluteMaxCode) 
+                    $ [256 .. absoluteMaxCode] <&> (, (0, 0)))
               256
               9
               False
@@ -235,13 +237,20 @@ decompress maxCodeLength compressed =
             ..
           } <-
           get
-        let newState@(DictionaryState _ _ newWordLength _ isFull) = updateDictionary dictSt (w1, w2) maxCodeLength
+        let newState@(
+                DictionaryState 
+                _ 
+                _ 
+                newWordLength 
+                _ 
+                isFull) = updateDictionary dictSt (w1, w2) maxCodeLength
         put DecompressState {dictState = newState}
         compressedRest <- decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
         lift $
           (<>)
             <$> unpackEntry decompDict w1
             <*> (Right (BS.singleton $ rightByte w2) <&> (<> compressedRest))
+
 
 unpackEntry ::
   Dictionary ->
