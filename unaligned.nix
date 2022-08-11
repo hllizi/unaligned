@@ -1,5 +1,5 @@
-{ mkDerivation, base, bitstring, bytestring, containers, extra
-, hspec, HUnit, lib, mtl, QuickCheck, typenums, vector
+{ mkDerivation, array, base, bitstring, bytestring, containers
+, extra, hspec, HUnit, lib, mtl, QuickCheck, typenums
 }:
 mkDerivation {
   pname = "Unaligned";
@@ -8,7 +8,7 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base bitstring bytestring containers extra mtl typenums vector
+    array base bitstring bytestring containers extra mtl typenums
   ];
   executableHaskellDepends = [ base bytestring ];
   testHaskellDepends = [

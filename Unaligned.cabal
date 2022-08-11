@@ -59,10 +59,10 @@ executable lzw-profiling
         Unaligned,
         bytestring,
         Unaligned
---    ghc-options:
---        -prof
---        -auto-all
---        "-with-rtsopts=-p"
+    ghc-options:
+        -prof
+        -auto-all
+        "-with-rtsopts=-p"
     hs-source-dirs:   app
     default-language: Haskell2010
 
