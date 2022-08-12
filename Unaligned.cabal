@@ -39,13 +39,16 @@ library
                       bitstring,
                       containers,
                       mtl,
-                      extra 
+                      extra,
+                      array,
+                      hashmap
+
  
     hs-source-dirs:   src
     default-language: Haskell2010
 
-executable Unaligned
-    main-is:          Main.hs
+executable lzw-profiling
+    main-is:          LzwProfiling.hs
 
     -- Modules included in this executable, other than Main.
     -- other-modules:
@@ -58,8 +61,6 @@ executable Unaligned
         bytestring,
         Unaligned
     ghc-options:
-        -O2
-        -threaded
         -prof
         -auto-all
         "-with-rtsopts=-p"
