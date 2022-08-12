@@ -274,14 +274,10 @@ unpackEntry dictionary word =
         then traceShow "Ölaf" $ BS.singleton $ fromIntegral word
         else
          traceShow ("Pooheim " <> (show $ vector V.! word)) $
-          let maybePair = traceShow vector $ vector V.! word
-              (nextWord, byte) =
-                maybePair `seq` maybeThrow
-                  ( UnpackException
-                      ("Compressed data invalid: no entry for code " <> show nextWord)
-                  )
-                  $ traceShow ("Wockner " <> show nextWord) maybePair
-           in nextWord `seq` byte `seq` trace ("boing: " <> show nextWord <> show byte) unpackEntry dictionary nextWord <> BS.singleton (fromIntegral byte)
+         maybeThrow (UnpackException  ("Compressed data invalid: no entry for code " <> show word)) $
+            do 
+             (nextWord, byte) <- traceShow vector $ vector V.! word
+             return $ nextWord `seq` byte `seq` trace ("boing: " <> show nextWord <> show byte) unpackEntry dictionary nextWord <> BS.singleton (fromIntegral byte)
     CompressDictionary _ ->
       throw $ UnpackException "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
 
