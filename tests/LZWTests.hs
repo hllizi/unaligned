@@ -29,26 +29,26 @@ main = do
        in compressed `shouldBe` expected
 
     it "decompress inverts compress" $
-      property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . fromRight "" $ decompress 12 $ compress 12 $ BS.pack bytes)
+      property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . decompress 12 $ compress 12 $ BS.pack bytes)
 
     it "Test decompress" $ do
       let testText = BS.pack $ map (fromIntegral . ord) sampletext
           compressed = compress 11 testText
           decompressed = decompress 11 compressed
        in do
-            fromRight "Default" decompressed
+            decompressed
               `shouldBe` testText
             forM_
               [testText]
               ( \testText ->
                   return
-                    ( ( fromRight "Default"
-                          . decompress 12
+                    ( ( 
+                            decompress 12
                           . compress 12
                           $ testText
                       )
                         `shouldBe` testText
                     )
               )
-      fromRight "Default" (decompress 12 (BS.pack [0, 128, 96, 0]))
+      decompress 12 (BS.pack [0, 128, 96, 0])
         `shouldBe` BS.pack [1, 1, 1, 1]
