@@ -196,17 +196,22 @@ takeWord input@(LeftOpenByteString sourceByteString usedBitsInFirstByte wordLeng
               )
   where
     chopNBytes :: Int -> (Maybe ByteString, ByteString)
-    chopNBytes n = do
-      let nTypeAdjusted = fromIntegral n
-      if BS.length sourceByteString >= nTypeAdjusted
+    chopNBytes n = 
+      if lengthNotBelow n sourceByteString
         then
-          ( Just $ BS.take nTypeAdjusted sourceByteString,
-            BS.drop nTypeAdjusted sourceByteString
-          )
+         let nTypeAdjusted = fromIntegral n
+          in
+            ( Just $ BS.take nTypeAdjusted sourceByteString,
+              BS.drop nTypeAdjusted sourceByteString
+            )
         else (Nothing, sourceByteString)
 
-    fitIn :: Int -> ByteString -> Word16 -> (Word16, LeftOpen Word8)
-    fitIn bitsToFitIn bs targetWord
+lengthNotBelow :: Int -> ByteString -> Bool
+lengthNotBelow 0 _ = True
+lengthNotBelow n bs = not (BS.null bs) && lengthNotBelow (n - 1) (BS.tail bs)
+
+fitIn :: Int -> ByteString -> Word16 -> (Word16, LeftOpen Word8)
+fitIn bitsToFitIn bs targetWord
       | bitsToFitIn <= 0 = (targetWord, LeftOpen 0 0)
       | bitsToFitIn > 8 =
         let remainingBits = (bitsToFitIn - 8)
