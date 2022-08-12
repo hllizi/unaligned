@@ -217,7 +217,7 @@ decompress maxCodeLength compressed =
             ..
           } <-
           get
-        return $ trace ("Unpacking: " <> show w) unpackEntry decompDict w
+        return $ unpackEntry decompDict w
     decompressHelper whole@(w1 :< (w2 :< lobs)) =
       do
         DecompressState
@@ -236,20 +236,11 @@ decompress maxCodeLength compressed =
                          newWordLength
                          _
                          isFull
-                       ) = traceShow ("Updating: " <> show (w1, w2)) updateDictionary dictSt (w1, w2) maxCodeLength
+                       ) = updateDictionary dictSt (w1, w2) maxCodeLength
         put DecompressState {dictState = newState}
-        compressedRest <- trace "Palter" decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
+        compressedRest <- decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
         return $
-          trace
-            ( "Unpacking: "
-                <> let DecompressDictionary array = decompDict
-                    in if w1 == 257
-                         then
-                           ( show "Bambonitzki: " <> (show $ array V.! 257)
-                           )
-                         else "Bamboon: " <> (show $ array V.! 257)
-            )
-            traceShow w1 unpackEntry
+            unpackEntry
                 decompDict
                 w1
             <> BS.singleton (rightByte w2)
@@ -266,23 +257,25 @@ unpackEntry ::
   Word16 ->
   ByteString
 unpackEntry dictionary word =
-  trace ("boonish" <> show word) $
   case dictionary of
     DecompressDictionary vector ->
-     trace "biggah" $ 
       if word < 256
-        then traceShow "Ölaf" $ BS.singleton $ fromIntegral word
+        then BS.singleton $ fromIntegral word
         else
-         traceShow ("Pooheim " <> (show $ vector V.! word)) $
-         maybeThrow (UnpackException  ("Compressed data invalid: no entry for code " <> show word)) $
-            do 
-             (nextWord, byte) <- traceShow vector $ vector V.! word
-             return $ nextWord `seq` byte `seq` trace ("boing: " <> show nextWord <> show byte) unpackEntry dictionary nextWord <> BS.singleton (fromIntegral byte)
+         let (nextWord,byte) = 
+                maybeThrow 
+                    (UnpackException  
+                        ("Compressed data invalid: no entry for code " 
+                        <> show word)) 
+                    $ vector V.! word
+          in
+                unpackEntry dictionary nextWord 
+             <> BS.singleton (fromIntegral byte)
     CompressDictionary _ ->
       throw $ UnpackException "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
 
 maybeThrow e m = case m of
-  Just m -> traceShow "Gooseheim" m
+  Just m -> m
   Nothing -> throw e
 
 traceThis :: (Show a) => a -> a
