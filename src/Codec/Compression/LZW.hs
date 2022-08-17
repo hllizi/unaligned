@@ -11,7 +11,7 @@ module Codec.Compression.LZW where
 
 import Control.Exception
 import Control.Monad.State
-import qualified Data.Array.IArray as V
+import qualified Data.Array.IArray as A 
 import Data.Bifunctor
 import qualified Data.BitString.BigEndian as BitStr
 import Data.ByteString.Lazy as BS
@@ -54,7 +54,7 @@ makeDictionaryState dictionary nextCode codeLength =
 
 data Dictionary
   = CompressDictionary (M.Map (Word16, Word16) Word16)
-  | DecompressDictionary (V.Array Word16 (Maybe (Word16, Word16)))
+  | DecompressDictionary (A.Array Word16 (Maybe (Word16, Word16)))
   deriving (Show)
 
 compress :: CodeLength -> ByteString -> ByteString
@@ -171,9 +171,9 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
   where
     updatedDictionary = case dictionary of
       CompressDictionary map -> CompressDictionary $ M.insert pair nextCode map
-      DecompressDictionary vector ->
+      DecompressDictionary array ->
         DecompressDictionary $
-          vector V.// [(fromIntegral nextCode, Just pair)]
+          array A.// [(fromIntegral nextCode, Just pair)]
 
 newtype DecompressState = DecompressState
   { dictState :: DictionaryState
@@ -189,7 +189,7 @@ decompress maxCodeLength compressed =
           ( makeDictionaryState
               ( DecompressDictionary $
                   let absoluteMaxCode = 2 ^ maxCodeLength - 1
-                   in V.array (256, absoluteMaxCode) $
+                   in A.array (256, absoluteMaxCode) $
                         [256 .. absoluteMaxCode] <&> (,Nothing)
               )
               256
@@ -258,7 +258,7 @@ unpackEntry ::
   ByteString
 unpackEntry dictionary word =
   case dictionary of
-    DecompressDictionary vector ->
+    DecompressDictionary array ->
       if word < 256
         then BS.singleton $ fromIntegral word
         else
@@ -267,7 +267,7 @@ unpackEntry dictionary word =
                     (UnpackException  
                         ("Compressed data invalid: no entry for code " 
                         <> show word)) 
-                    $ vector V.! word
+                    $ array A.! word
           in
                 unpackEntry dictionary nextWord 
              <> BS.singleton (fromIntegral byte)
