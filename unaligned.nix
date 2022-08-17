@@ -1,5 +1,6 @@
-{ mkDerivation, array, base, bitstring, bytestring, containers
-, extra, hashmap, hspec, HUnit, lib, mtl, QuickCheck, typenums
+{ mkDerivation, array, base, bitstring, bytestring, conduit
+, containers, extra, hashmap, hspec, HUnit, lib, mtl, QuickCheck
+, typenums
 }:
 mkDerivation {
   pname = "Unaligned";
@@ -8,12 +9,12 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    array base bitstring bytestring containers extra hashmap mtl
-    typenums
+    array base bitstring bytestring conduit containers extra hashmap
+    mtl typenums
   ];
   executableHaskellDepends = [ base bytestring ];
   testHaskellDepends = [
-    base bitstring bytestring hspec HUnit QuickCheck
+    base bitstring bytestring conduit hspec HUnit QuickCheck
   ];
   license = "unknown";
   hydraPlatforms = lib.platforms.none;

@@ -26,7 +26,7 @@ version:            0.1.0.0
 extra-source-files: CHANGELOG.md
 library-profiling: True
 library
-    exposed-modules:  Unaligned, Codec.Compression.LZW
+    exposed-modules:  Unaligned, Codec.Compression.LZW, Codec.Compression.LZW.Conduit
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -41,7 +41,8 @@ library
                       mtl,
                       extra,
                       array,
-                      hashmap
+                      hashmap,
+                      conduit
 
  
     hs-source-dirs:   src
@@ -81,7 +82,7 @@ Test-suite unaligned-tests
     QuickCheck, 
     bytestring, 
     Unaligned, 
-    bitstring
+    bitstring,
 Test-suite lzw-tests
   Hs-Source-Dirs:       tests
   Main-Is:              LZWTests.hs
@@ -97,3 +98,6 @@ Test-suite lzw-tests
     bytestring, 
     Unaligned, 
     bitstring,
+    binary,
+    conduit,
+    binary

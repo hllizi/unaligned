@@ -12,15 +12,20 @@ import Data.Either
 import Data.List
 import Data.Word
 import Data.Char
+import Data.Binary.Builder
 import Debug.Trace
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 import Unaligned
+import qualified Codec.Compression.LZW.Conduit as Cond
+import Conduit
+import Data.Binary.Builder
 
 main :: IO ()
 main = do
   sampletext <- readFile "./tests/sample.txt"
+  let testText = BS.pack $ map (fromIntegral . ord) sampletext
   hspec $ do
     it "Test compress" $ do
       let toCompress = 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` 1 `BS.cons` BS.empty
@@ -32,8 +37,7 @@ main = do
       property $ \(bytes :: [Word8]) -> bytes == (BS.unpack . decompress 12 $ compress 12 $ BS.pack bytes)
 
     it "Test decompress" $ do
-      let testText = BS.pack $ map (fromIntegral . ord) sampletext
-          compressed = compress 11 testText
+      let compressed = compress 11 testText
           decompressed = decompress 11 compressed
        in do
             decompressed
@@ -52,3 +56,18 @@ main = do
               )
       decompress 12 (BS.pack [0, 128, 96, 0])
         `shouldBe` BS.pack [1, 1, 1, 1]
+
+      
+    it "Test conduit inverse" $ do
+        compressDecompress <- 
+         runConduit $   yield testText 
+                     .| Cond.compress 13
+                     .| Cond.decompress 13
+                     .| mapC fromLazyByteString
+                     .| sinkLazyBuilder
+
+                      
+
+        compressDecompress `shouldBe` testText
+
+
