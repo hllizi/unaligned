@@ -11,7 +11,7 @@ module Codec.Compression.LZW where
 
 import Control.Exception
 import Control.Monad.State
-import qualified Data.Array.IArray as A 
+import qualified Data.Vector as A 
 import Data.Bifunctor
 import qualified Data.BitString.BigEndian as BitStr
 import Data.ByteString.Lazy as BS
@@ -54,8 +54,7 @@ makeDictionaryState dictionary nextCode codeLength =
 
 data Dictionary
   = CompressDictionary (M.Map (Word16, Word16) Word16)
-  | DecompressDictionary (A.Array Word16 (Maybe (Word16, Word16)))
-  deriving (Show)
+  | DecompressDictionary (A.Vector (Maybe (Word16, Word16)))
 
 compress :: CodeLength -> ByteString -> ByteString
 compress maxCodeLength bs =
@@ -188,9 +187,8 @@ decompress maxCodeLength compressed =
         DecompressState
           ( makeDictionaryState
               ( DecompressDictionary $
-                  let absoluteMaxCode = 2 ^ maxCodeLength - 1
-                   in A.array (256, absoluteMaxCode) $
-                        [256 .. absoluteMaxCode] <&> (,Nothing)
+                  let maxNumberOfCodes = 2 ^ maxCodeLength 
+                   in A.replicate maxNumberOfCodes Nothing
               )
               256
               9
@@ -217,7 +215,7 @@ decompress maxCodeLength compressed =
             ..
           } <-
           get
-        return $ unpackEntry decompDict w
+        return $ unpackEntry decompDict (fromIntegral w)
     decompressHelper whole@(w1 :< (w2 :< lobs)) =
       do
         DecompressState
@@ -242,7 +240,7 @@ decompress maxCodeLength compressed =
         return $
             unpackEntry
                 decompDict
-                w1
+                (fromIntegral w1)
             <> BS.singleton (rightByte w2)
             <> compressedRest
     -- without the following line, hls complains about non-exhaustive pattern matches even though the use of the actually exported (non-constructor) patterns should is exhaustive.
@@ -254,7 +252,7 @@ instance Exception UnpackException
 
 unpackEntry ::
   Dictionary ->
-  Word16 ->
+  Int ->
   ByteString
 unpackEntry dictionary word =
   case dictionary of
@@ -269,7 +267,7 @@ unpackEntry dictionary word =
                         <> show word)) 
                     $ array A.! word
           in
-                unpackEntry dictionary nextWord 
+                unpackEntry dictionary (fromIntegral nextWord)
              <> BS.singleton (fromIntegral byte)
     CompressDictionary _ ->
       throw $ UnpackException "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."

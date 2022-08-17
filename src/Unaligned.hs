@@ -45,8 +45,6 @@ import Data.Word
 import Debug.Trace
 import GHC.Exts
 
-type Bitcount = Word
-
 data LeftOpen integral = LeftOpen integral Int
   deriving (Show, Eq)
 
@@ -57,8 +55,8 @@ makeLeftOpen integral n = LeftOpen unusedToZero n
        in fromIntegral $ mask .&. integral
 
 data RightOpen integral = RightOpen
-  { rightOpenContent :: integral,
-    rightOpenUsedBits :: Int
+  { rightOpenContent :: !integral,
+    rightOpenUsedBits :: {-# UNPACK #-} !Int
   }
   deriving (Show, Eq)
 
@@ -88,8 +86,8 @@ data RightOpenByteString
 
 data LeftOpenByteString = LeftOpenByteString
   { lobsContent :: ByteString,
-    lobsUsedBitsInFirstByte :: Int,
-    lobsLengthOfNextWord :: Int
+    lobsUsedBitsInFirstByte :: {-# UNPACK #-} !Int,
+    lobsLengthOfNextWord :: {-# UNPACK #-} !Int
   }
 deriving instance Show LeftOpenByteString
 

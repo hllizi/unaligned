@@ -40,7 +40,7 @@ library
                       containers,
                       mtl,
                       extra,
-                      array,
+                      vector,
                       hashmap,
                       conduit
 
