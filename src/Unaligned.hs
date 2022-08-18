@@ -111,16 +111,6 @@ makeRightOpenByteString bs used =
     then EmptyROBs
     else BS.take (BS.length bs - 1) bs :> makeRightOpen (BS.last bs) used
 
-class ToByteString a where
-  toByteString :: a -> ByteString
-
-instance ToByteString RightOpenByteString where
-  toByteString (bs :> RightOpen byte n) = bs `BS.append` singleton byte
-  toByteString EmptyROBs = BS.empty
-
-instance ToByteString (ByteString, RightOpen Word8) where
-  toByteString (bs, RightOpen word _) = bs `snoc` word
-
 -- | Get the left byte of a 16 Bit word
 leftByte :: Word16 -> Word8
 leftByte word = fromIntegral $ shiftR word 8
