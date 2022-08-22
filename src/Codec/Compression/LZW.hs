@@ -11,8 +11,8 @@
 module Codec.Compression.LZW where
 
 import Control.Exception
-import Control.Monad.ST
-import Control.Monad.State
+import Control.Monad.ST.Lazy
+import Control.Monad.State.Lazy
 import Data.Bifunctor
 import qualified Data.BitString.BigEndian as BitStr
 import Data.ByteString.Lazy as BS
@@ -40,12 +40,12 @@ initialMap =
     [1 .. 255]
 
 data CompressState s = CompressState
-  { dictState :: !(DictionaryState s),
+  { compressDictState :: !(DictionaryState s),
     unfinishedByte :: !(RightOpen Word8)
   }
 
 data DictionaryState s = DictionaryState
-  { dictionary :: Dictionary s,
+  { dictionary :: !(Dictionary s),
     nextCode :: !Word16,
     codeLength :: !CodeLength,
     maxCode :: !Word16,
@@ -58,7 +58,7 @@ makeDictionaryState dictionary nextCode codeLength =
 
 data Dictionary s
   = CompressDictionary (M.Map (Word16, Word16) Word16)
-  | DecompressDictionary (M.STVector s (Maybe (Word16, Word16)))
+  | DecompressDictionary !(M.STVector s (Maybe (Word16, Word16)))
 
 compress :: CodeLength -> ByteString -> ByteString
 compress maxCodeLength bs =
@@ -189,10 +189,12 @@ updateDictionary dictState@(DictionaryState dictionary nextCode codeLength maxCo
       DecompressDictionary array ->
         DecompressDictionary <$> do
           M.write array (fromIntegral nextCode) (Just pair)
+          bamboon <- A.freeze array
+          --pure $ trace ("boonish: " <> show bamboon) array
           pure array
 
 newtype DecompressState s = DecompressState
-  { dictState :: DictionaryState s
+  { decompressDictState :: DictionaryState s
   }
 
 type DecompressDictionary = M.Map Word16 (Word16, Word16)
@@ -232,7 +234,7 @@ decompress maxCodeLength compressed =
     decompressHelper (w :< (Final lobs)) =
       do
         DecompressState
-          { dictState =
+          { decompressDictState =
               DictionaryState
                 { dictionary = decompDict,
                   nextCode = nextcode,
@@ -241,11 +243,11 @@ decompress maxCodeLength compressed =
             ..
           } <-
           get
-        lift $ evalStateT (unpackEntry (fromIntegral w)) decompDict
+        unpackEntry (fromIntegral w)
     decompressHelper whole@(w1 :< (w2 :< lobs)) =
       do
         DecompressState
-          { dictState =
+          { decompressDictState =
               dictSt@DictionaryState
                 { dictionary = decompDict,
                   nextCode = nextcode,
@@ -262,18 +264,18 @@ decompress maxCodeLength compressed =
                      isFull
                    ) <-
           lift $ updateDictionary dictSt (w1, w2) maxCodeLength
-        put DecompressState {dictState = newState}
+
+        frozen <- case dictionary of
+          DecompressDictionary dict -> A.freeze dict
+        -- trace ("Frozen out: " <> show frozen) $ return ()
+
+        put DecompressState {decompressDictState = newState}
         compressedRest <- decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
-        lift $
-          evalStateT
-            ( unpackEntry
-                (fromIntegral w1)
-                <&> ( <>
-                        BS.singleton (rightByte w2)
-                          <> compressedRest
-                    )
-            )
-            dictionary
+        codeUnpacked <- trace "Mordnsknut" unpackEntry (fromIntegral w1)
+        return $ codeUnpacked 
+              <> BS.singleton (rightByte w2)
+              <> compressedRest
+
     -- without the following line, hls complains about non-exhaustive pattern matches even though the use of the actually exported (non-constructor) patterns should is exhaustive.
     decompressHelper x = error $ "This should not have happened: " <> show x <> " did not match any pattern built with :< and Final in decompressHelper."
 
@@ -284,26 +286,30 @@ instance Exception UnpackException
 unpackEntry ::
   Int ->
   StateT
-    (Dictionary s)
+    (DecompressState s)
     (ST s)
     ByteString
 unpackEntry word = do
-  dictionary <- get
+  dictionary <- trace "\n In" gets (dictionary . decompressDictState)
   case dictionary of
-    DecompressDictionary array ->
+    DecompressDictionary array -> do
+      frozen <- A.freeze array
+      trace ("Ogniz Bablerina" <> show word) $ return ()
       if word < 256
-        then return $ BS.singleton $ fromIntegral word
+        then return $ BS.singleton $ fromIntegral $ trace "BAHEEEEEM!" $  word
         else do
           (nextWord, byte) <-
-            maybeThrow
+            
+            trace "Alf Adan" maybeThrow
               ( UnpackException
                   ( "Compressed data invalid: no entry for code "
                       <> show word
                   )
               )
               <$> M.read array word
-          (unpackEntry (fromIntegral nextWord))
-            <&> (<> BS.singleton (fromIntegral byte))
+          unpacked <- trace "Udolf" (unpackEntry (fromIntegral nextWord))
+          return $ (trace ("unpacking" <> show nextWord <> " to " <> show unpacked) unpacked) 
+            <> BS.singleton (fromIntegral byte)
     CompressDictionary _ ->
       throw $ UnpackException "A decompress dictionary was provided to the function unpackEntry in the function decompress. This should not even be possible."
 
