@@ -15,7 +15,7 @@ main = do
     let example = Main.repeat nats 1000
     file <- BS.readFile "./tests/usher.txt"
     file2 <- BS.readFile "/home/dlahm/tmp/2981.txt"
-    let compressed = compress 14 file
+    let compressed = compress 14 file2
     print $ compressed 
     print $ decompress 14 compressed
     --print $ decompress 14 $ compress 14 $ BS.pack example
