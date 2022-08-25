@@ -267,7 +267,7 @@ decompress maxCodeLength compressed =
           get
         vector <- A.unsafeFreeze decompDict
         let codeUnpacked = unpackEntry vector (fromIntegral w1)
-        thawed <- A.unsafeThaw vector
+        A.unsafeThaw vector
         newState <-
           updateDictionary maxCodeLength (w1, w2)
         put newState
