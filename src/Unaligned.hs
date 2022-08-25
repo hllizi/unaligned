@@ -16,7 +16,7 @@
 module Unaligned(
    RightOpen(..),
    LeftOpen(..),
-   LeftOpenByteString(Final, (:<)),
+   LeftOpenByteString(Final, (:.)),
    RightOpenByteString(..),
    lobsContent,
    lobsLengthOfNextWord,
@@ -218,7 +218,7 @@ fitIn bitsToFitIn bs targetWord
               LeftOpen remainder bitsRemainingInInput
             )
 
-pattern w :< rest <- (takeWord -> (Just w, rest))
+pattern w :. rest <- (takeWord -> (Just w, rest))
 
 pattern Final bs <- (takeWord -> (Nothing, bs))
 

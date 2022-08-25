@@ -104,7 +104,7 @@ main = hspec $ do
             let lobs = makeLeftOpenByteString (0 `cons` 128 `cons` 96 `cons` 0 `cons` empty) 8 9
                 allOnes = makeLeftOpenByteString (pack [255, 255, 255, 255])
                 halfHalf = makeLeftOpenByteString (pack [15, 15])
-                w1 :< (w2 :< _) = lobs
+                w1 :. (w2 :. _) = lobs
              in do
                   let takeFirst = takeWord lobs
                   takeFirst `shouldBe` (Just 1, makeLeftOpenByteString (0 `cons` 96 `cons` 0 `cons` empty) 7 9)

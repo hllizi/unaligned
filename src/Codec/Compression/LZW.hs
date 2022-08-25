@@ -205,7 +205,7 @@ updateDictionary maxCodeLength pair = do
           DecompressDictionary <$> do
             firstDecoded <- fromMaybe (BS.singleton $ fromIntegral $ fst pair) <$> M.read array (fromIntegral $ fst pair)
             let newEntry = firstDecoded `BS.snoc` fromIntegral (snd pair)
-            M.write array (fromIntegral nextCode) $  Just newEntry
+            M.write array (fromIntegral nextCode) $ Just newEntry
             --pure $ trace ("boonish: " <> show bamboon) array
             pure array
 
@@ -217,14 +217,14 @@ decompress maxCodeLength compressed =
    in runST $ do
         let maxNumberOfCodes = 2 ^ maxCodeLength
         prefilledVector <-
-            M.generate
-              maxNumberOfCodes
-              ( \n ->
-                  if n > 255
-                    then Nothing
-                    else Just $ BS.singleton $ fromIntegral n
-              )
-        let initState = 
+          M.generate
+            maxNumberOfCodes
+            ( \n ->
+                if n > 255
+                  then Nothing
+                  else Just $ BS.singleton $ fromIntegral n
+            )
+        let initState =
               makeDictionaryState
                 ( DecompressDictionary
                     prefilledVector
@@ -242,7 +242,7 @@ decompress maxCodeLength compressed =
         (ST s)
         ByteString
     decompressHelper (Final lobs) = return BS.empty
-    decompressHelper (w :< (Final lobs)) =
+    decompressHelper (w :. (Final lobs)) =
       do
         DictionaryState
           { dictionary = ~(DecompressDictionary decompDict),
@@ -252,7 +252,7 @@ decompress maxCodeLength compressed =
           get
         vector <- A.unsafeFreeze decompDict
         return $ unpackEntry vector (fromIntegral w)
-    decompressHelper whole@(w1 :< (w2 :< lobs)) =
+    decompressHelper whole@(w1 :. (w2 :. lobs)) =
       do
         dictSt@DictionaryState
           { dictionary = ~(DecompressDictionary decompDict),
@@ -260,7 +260,7 @@ decompress maxCodeLength compressed =
             codeLength = length
           } <-
           get
-        boff <-  M.read decompDict 256
+        boff <- M.read decompDict 256
         vector <- A.unsafeFreeze decompDict
         let codeUnpacked = unpackEntry vector (fromIntegral w1)
         thawed <- A.unsafeThaw vector
@@ -274,13 +274,13 @@ decompress maxCodeLength compressed =
           updateDictionary maxCodeLength (w1, w2)
         put newState
         compressedRest <- decompressHelper (lobs {lobsLengthOfNextWord = newWordLength})
-        return $ 
+        return $
           codeUnpacked
             <> BS.singleton (rightByte w2)
             <> compressedRest
 
     -- without the following line, hls complains about non-exhaustive pattern matches even though the use of the actually exported (non-constructor) patterns should is exhaustive.
-    decompressHelper x = error $ "This should not have happened: " <> show x <> " did not match any pattern built with :< and Final in decompressHelper."
+    decompressHelper x = error $ "This should not have happened: " <> show x <> " did not match any pattern built with :. and Final in decompressHelper."
 
 newtype UnpackException = UnpackException String deriving (Show, Typeable)
 
@@ -290,14 +290,14 @@ unpackEntry ::
   A.Vector (Maybe ByteString) ->
   Int ->
   ByteString
-unpackEntry array word = 
-      maybeThrow
-      ( UnpackException
-          ( "Compressed data invalid: no entry for code "
-              <> show word
-          )
-      )
-      (array A.! word)
+unpackEntry array word =
+  maybeThrow
+    ( UnpackException
+        ( "Compressed data invalid: no entry for code "
+            <> show word
+        )
+    )
+    (array A.! word)
 
 maybeThrow e m = case m of
   Just m -> m
