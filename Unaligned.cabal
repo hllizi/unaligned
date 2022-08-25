@@ -42,7 +42,9 @@ library
                       extra,
                       vector,
                       hashmap,
-                      conduit
+                      conduit,
+                      lens,
+                      generic-lens
 
  
     hs-source-dirs:   src

@@ -7,12 +7,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 
 module Codec.Compression.LZW where
 
 import Control.Exception
 import Control.Monad.ST.Lazy
 import Control.Monad.State.Lazy
+import GHC.Generics
+import Control.Lens
+import Data.Generics.Labels
 import Data.Bifunctor
 import qualified Data.BitString.BigEndian as BitStr
 import Data.ByteString.Lazy as BS
@@ -193,7 +199,7 @@ updateDictionary maxCodeLength pair = do
     updatedDictionaryMon :: StateT (DictionaryState s) (ST s) (Dictionary s)
     updatedDictionaryMon = do
       dictState@(DictionaryState dictionary nextCode codeLength maxCode isFull) <- get
-      case dictionary of
+      case dictState ^. #dictionary of
         CompressDictionary map -> pure $ CompressDictionary $ M.insert pair nextCode map
         DecompressDictionary array ->
           DecompressDictionary <$> do
