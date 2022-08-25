@@ -254,7 +254,6 @@ decompress maxCodeLength compressed =
             codeLength = length
           } <-
           get
-        boff <- M.read decompDict 256
         vector <- A.unsafeFreeze decompDict
         let codeUnpacked = unpackEntry vector (fromIntegral w1)
         thawed <- A.unsafeThaw vector
